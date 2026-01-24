@@ -1,9 +1,10 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes
 import re
+import os
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # ===== CONFIG =====
-BOT_TOKEN = "YOUR_BOT_TOKEN"
 
 # Private channel username (without @)
 CHANNEL_USERNAME = "YourPrivateChannel"
