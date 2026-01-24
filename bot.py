@@ -52,7 +52,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     keyboard.append([InlineKeyboardButton(label, url=url)])
 
         if not keyboard:
-            await update.message.reply_text("❌ No valid buttons found! Use the format: Text - URL | Text2 - URL2")
+            await update.message.reply_text(
+                "❌ No valid buttons found! Use the format: Text - URL | Text2 - URL2"
+            )
             return
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -67,7 +69,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("Invalid channel post link format!")
                 return
 
-            # Edit existing buttons or add new buttons
+            # Replace old buttons with new ones (bot's own messages only)
             await context.bot.edit_message_reply_markup(
                 chat_id=chat_id,
                 message_id=message_id,
@@ -76,7 +78,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("✅ Buttons added/updated successfully!")
 
         except Exception as e:
-            await update.message.reply_text(f"❌ Error: {e}")
+            # Detailed error for debugging
+            error_msg = str(e)
+            if "Message_id_invalid" in error_msg:
+                await update.message.reply_text(
+                    "❌ Error: Cannot edit this message. Make sure the bot posted it and the link is correct."
+                )
+            else:
+                await update.message.reply_text(f"❌ Error: {error_msg}")
 
         # Reset user step
         user_data[user_id] = {"step": "awaiting_post"}
@@ -84,7 +93,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Main function
 def main():
     if not BOT_TOKEN:
-        raise ValueError("BOT_TOKEN is not set! Make sure you set BOT_TOKEN Config Var on Heroku.")
+        raise ValueError(
+            "BOT_TOKEN is not set! Make sure you set BOT_TOKEN Config Var on Heroku."
+        )
 
     # v20+ ApplicationBuilder
     app = ApplicationBuilder().token(BOT_TOKEN).build()
