@@ -2,6 +2,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes
 import re
 import os
+
+CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # ===== CONFIG =====
