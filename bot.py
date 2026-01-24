@@ -1,7 +1,7 @@
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters
-
+from config import BOT_TOKEN, CHANNEL_ID
 # Dictionary to store temporary data per user
 user_data = {}
 
