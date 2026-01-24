@@ -1,6 +1,7 @@
 import os
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, Update
+from dotenv import load_dotenv
 
-# Heroku Config Vars
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+load_dotenv()  # load variables from .env
+
+BOT_TOKEN = os.environ.get("TOKEN")
+CHANNEL_ID = os.environ.get("DEFAULT_CHANNEL_ID")
