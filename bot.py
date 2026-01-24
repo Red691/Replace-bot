@@ -1,8 +1,6 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 import os
-from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackContext, filters
-# Your bot token
-BOT_TOKEN = os.environ.get("YOUR_BOT_TOKEN")
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters
 
 # Dictionary to store temporary data per user
 user_data = {}
@@ -49,17 +47,14 @@ def handle_message(update: Update, context: CallbackContext):
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
-            # Extract chat_id and message_id from post link
-            # Telegram private channel links look like t.me/c/<channel_id>/<message_id>
             if "t.me/c/" in post_link:
                 parts = post_link.split("/")
-                chat_id = int("-100" + parts[-2])  # Channel ID format for private channels
+                chat_id = int("-100" + parts[-2])
                 message_id = int(parts[-1])
             else:
                 update.message.reply_text("Invalid channel post link format!")
                 return
 
-            # Edit the channel post with buttons
             context.bot.edit_message_reply_markup(
                 chat_id=chat_id,
                 message_id=message_id,
@@ -70,18 +65,18 @@ def handle_message(update: Update, context: CallbackContext):
         except Exception as e:
             update.message.reply_text(f"❌ Error: {e}")
 
-        # Reset user step
         user_data[user_id] = {"step": "awaiting_post"}
 
 def main():
-    updater = Updater(BOT_TOKEN)
-    dp = updater.dispatcher
+    BOT_TOKEN = os.environ.get("TOKEN")  # Heroku Config Var key
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    # v20+ ApplicationBuilder
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    updater.start_polling()
-    updater.idle()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
