@@ -61,12 +61,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("Invalid channel post link format!")
                 return
 
+            # Edit existing buttons or add new buttons
             await context.bot.edit_message_reply_markup(
                 chat_id=chat_id,
                 message_id=message_id,
                 reply_markup=reply_markup
             )
-            await update.message.reply_text("✅ Buttons added successfully!")
+            await update.message.reply_text("✅ Buttons added/updated successfully!")
 
         except Exception as e:
             await update.message.reply_text(f"❌ Error: {e}")
