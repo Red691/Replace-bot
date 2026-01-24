@@ -1,121 +1,78 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes
-import re
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import os
-from buttons import BTN_LIST  # import dynamic button list
 
-# ===== CONFIG =====
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
-# ===================
+BOT_TOKEN = "YOUR_BOT_TOKEN"
+PRIVATE_CHANNEL_ID = "@your_channel_username_or_id"
+# Function to parse buttons from your format
+def parse_buttons(text):
+    buttons = []
+    lines = text.strip().split("\n")
+    for line in lines:
+        if "-" in line:
+            btn_text, url = line.split("-", 1)
+            buttons.append(InlineKeyboardButton(btn_text.strip(), url=url.strip()))
+    return InlineKeyboardMarkup.from_row(buttons)  # all in single row
 
-def extract_post_id(link: str):
-    match = re.search(r"/(\d+)$", link)
-    return int(match.group(1)) if match else None
+# Command to add new buttons to an existing message
+async def add_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        await update.message.reply_text("Use this bot in private chat only!")
+        return
 
-def default_keyboard():
-    # dynamically create buttons from BTN_LIST
-    keyboard = [[InlineKeyboardButton(f"Button {i+1}", url=url)] for i, url in enumerate(BTN_LIST)]
-    return InlineKeyboardMarkup(keyboard)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "✅ Replace Bot Online\n\n"
-        "Commands:\n"
-        "/replace_text <channel_post_link>\n"
-        "/replace_media <channel_post_link>\n"
-        "/replace_buttons <channel_post_link>\n\n"
-        "Use command by replying to a message."
-    )
-
-# --- Replace Text ---
-async def replace_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.reply_to_message:
-        return await update.message.reply_text("Reply to a text message.")
+        await update.message.reply_text("Reply to a channel message to add buttons!")
+        return
 
     if not context.args:
-        return await update.message.reply_text("Use: /replace_text <channel_post_link>")
+        await update.message.reply_text("Send buttons in format:\nButton text - URL")
+        return
 
-    post_id = extract_post_id(context.args[0])
-    if not post_id:
-        return await update.message.reply_text("Invalid channel post link.")
+    new_buttons_markup = parse_buttons(" ".join(context.args))
 
-    msg = update.message.reply_to_message
-    new_text = msg.text or msg.caption
-
-    if not new_text:
-        return await update.message.reply_text("Replied message has no text.")
-
-    await context.bot.edit_message_text(
-        chat_id=CHANNEL_ID,
-        message_id=post_id,
-        text=new_text,
-        reply_markup=default_keyboard()
-    )
-
-    await update.message.reply_text("✅ Text replaced successfully.")
-
-# --- Replace Media ---
-async def replace_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("Reply to a media message.")
-
-    if not context.args:
-        return await update.message.reply_text("Use: /replace_media <channel_post_link>")
-
-    post_id = extract_post_id(context.args[0])
-    if not post_id:
-        return await update.message.reply_text("Invalid channel post link.")
-
-    msg = update.message.reply_to_message
-
-    if msg.photo:
-        file_id = msg.photo[-1].file_id
-        await context.bot.edit_message_media(
-            chat_id=CHANNEL_ID,
-            message_id=post_id,
-            media={"type": "photo", "media": file_id, "caption": msg.caption or ""}
-        )
-    elif msg.video:
-        file_id = msg.video.file_id
-        await context.bot.edit_message_media(
-            chat_id=CHANNEL_ID,
-            message_id=post_id,
-            media={"type": "video", "media": file_id, "caption": msg.caption or ""}
-        )
+    # Get existing buttons
+    old_markup = update.message.reply_to_message.reply_markup
+    if old_markup:
+        existing_buttons = [btn for row in old_markup.inline_keyboard for btn in row]
     else:
-        return await update.message.reply_text("Reply must contain photo or video.")
+        existing_buttons = []
 
-    await update.message.reply_text("✅ Media replaced successfully.")
+    # Combine old + new buttons
+    combined_buttons = existing_buttons + [btn for row in new_buttons_markup.inline_keyboard for btn in row]
 
-# --- Replace Buttons Only ---
-async def replace_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Update message
+    combined_markup = InlineKeyboardMarkup.from_row(combined_buttons)
+
+    try:
+        await context.bot.edit_message_reply_markup(
+            chat_id=update.message.reply_to_message.chat_id,
+            message_id=update.message.reply_to_message.message_id,
+            reply_markup=combined_markup
+        )
+        await update.message.reply_text("✅ New buttons added successfully!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Failed: {e}")
+
+# Command to post a new message with buttons
+async def post_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        return await update.message.reply_text("Use: /replace_buttons <channel_post_link>")
+        await update.message.reply_text("Send buttons in format:\nButton text - URL")
+        return
 
-    post_id = extract_post_id(context.args[0])
-    if not post_id:
-        return await update.message.reply_text("Invalid channel post link.")
+    button_text = " ".join(context.args)
+    markup = parse_buttons(button_text)
 
-    await context.bot.edit_message_reply_markup(
-        chat_id=CHANNEL_ID,
-        message_id=post_id,
-        reply_markup=default_keyboard()
+    await context.bot.send_message(
+        chat_id=PRIVATE_CHANNEL_ID,
+        text="Here is a post with buttons:",
+        reply_markup=markup
     )
+    await update.message.reply_text("✅ Message posted to channel!")
 
-    await update.message.reply_text("✅ Buttons replaced successfully.")
+# Run the bot
+app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# --- Main Runner ---
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+app.add_handler(CommandHandler("new", add_buttons))
+app.add_handler(CommandHandler("post", post_buttons))
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("replace_text", replace_text))
-    app.add_handler(CommandHandler("replace_media", replace_media))
-    app.add_handler(CommandHandler("replace_buttons", replace_buttons))
-
-    print("Bot is running...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+app.run_polling()
