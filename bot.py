@@ -10,19 +10,20 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 
 # ===== CONFIG =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = 123456789  # <-- Apna Telegram ID yaha daalo
+ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))  # <-- Heroku Config Var
 
+# ---------- ADMIN CHECK ----------
+def is_admin(update: Update):
+    user = update.effective_user
+    if user:
+        return int(user.id) == ADMIN_ID
+    return False
+    
 user_data = {}
 message_buttons = {}  # message_id: InlineKeyboardMarkup
 
 
 # ---------- ADMIN CHECK ----------
-def is_admin(update: Update):
-    try:
-        return int(update.effective_user.id) == ADMIN_ID
-    except:
-        return False
-
 
 # ---------- BUTTON PARSER ----------
 def parse_buttons(text: str):
