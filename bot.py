@@ -10,18 +10,18 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 
 # ===== CONFIG =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))  # <-- Add your Telegram ID in Heroku Config Vars
+ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))  # Heroku Config Var for admin
+
+# ----- TEMP DATA -----
+user_data = {}
+message_buttons = {}  # message_id: InlineKeyboardMarkup
+
 
 # ---------- ADMIN CHECK ----------
 def is_admin(update: Update):
     user = update.effective_user
-    if user:
-        return int(user.id) == ADMIN_ID
-    return False
+    return user and int(user.id) == ADMIN_ID
 
-# ---------- GLOBAL DATA ----------
-user_data = {}          # Tracks per-user step
-message_buttons = {}    # message_id: InlineKeyboardMarkup (buttons)
 
 # ---------- BUTTON PARSER ----------
 def parse_buttons(text: str):
@@ -33,27 +33,24 @@ def parse_buttons(text: str):
         if not row:
             continue
 
-        parts = row.split("  ")  # Double space = same row
+        parts = row.split("  ")  # double space = same row
         row_buttons = []
 
         for part in parts:
             part = part.strip()
             if "-" not in part:
                 continue
-
             label, url = part.split("-", 1)
-            label = label.strip()
-            url = url.strip()
-
+            label, url = label.strip(), url.strip()
             if not url.startswith("http"):
                 continue
-
             row_buttons.append(InlineKeyboardButton(label, url=url))
 
         if row_buttons:
             keyboard.append(row_buttons)
 
     return InlineKeyboardMarkup(keyboard) if keyboard else None
+
 
 # ---------- LINK EXTRACT ----------
 def extract_ids(post_link: str):
@@ -64,6 +61,7 @@ def extract_ids(post_link: str):
     message_id = int(parts[-1])
     return chat_id, message_id
 
+
 # ---------- START ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
@@ -73,16 +71,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Send channel post link to edit buttons.")
     user_data[update.effective_user.id] = {"step": "awaiting_post_link"}
 
+
 # ---------- REPLACE ----------
 async def replace_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         await update.message.reply_text("⛔ Access Denied")
         return
 
-    await update.message.reply_text("Send channel post link you want to REPLACE.")
+    await update.message.reply_text(
+        "Send the post link you want to /replace. You can also send new inline buttons after content."
+    )
     user_data[update.effective_user.id] = {"step": "awaiting_replace_link"}
 
-# ---------- MAIN MESSAGE HANDLER ----------
+
+# ---------- MAIN HANDLER ----------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return
@@ -99,18 +101,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id]["post_link"] = text
         user_data[user_id]["step"] = "awaiting_buttons"
         await update.message.reply_text(
-            "Send button layout:\n\nNew row = Enter\nSame row = Double Space"
+            "Send button layout (if any):\n\nNew row = Enter\nSame row = Double Space"
         )
         return
 
     if step == "awaiting_buttons":
         post_link = user_data[user_id]["post_link"]
         keyboard = parse_buttons(text)
-
-        if not keyboard:
-            await update.message.reply_text("❌ No valid buttons found.")
-            return
-
         chat_id, message_id = extract_ids(post_link)
         if not chat_id:
             await update.message.reply_text("❌ Invalid post link.")
@@ -122,7 +119,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 message_id=message_id,
                 reply_markup=keyboard
             )
-            message_buttons[message_id] = keyboard
+            if keyboard:
+                message_buttons[message_id] = keyboard
             await update.message.reply_text("✅ Buttons updated successfully!")
         except Exception as e:
             await update.message.reply_text(f"❌ {e}")
@@ -134,21 +132,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == "awaiting_replace_link":
         user_data[user_id]["post_link"] = text
         user_data[user_id]["step"] = "awaiting_new_content"
-        await update.message.reply_text("Send new Text OR Photo OR Video with caption.")
+        await update.message.reply_text(
+            "Send new Text OR Photo OR Video. You can also include inline buttons (text format)."
+        )
         return
 
     if step == "awaiting_new_content":
         post_link = user_data[user_id]["post_link"]
         chat_id, message_id = extract_ids(post_link)
-
         if not chat_id:
             await update.message.reply_text("❌ Invalid post link.")
             return
 
         try:
-            # Get old buttons if exist
-            reply_markup = message_buttons.get(message_id, None)
+            # Check if user sent new buttons in caption/text
+            new_buttons = None
+            if update.message.caption:
+                new_buttons = parse_buttons(update.message.caption)
+            elif update.message.text:
+                new_buttons = parse_buttons(update.message.text)
 
+            reply_markup = new_buttons or message_buttons.get(message_id, None)
             new_caption = update.message.caption or update.message.text or ""
 
             # --- PHOTO REPLACE ---
@@ -182,12 +186,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=reply_markup
                 )
 
+            # Save buttons for future replaces
+            if reply_markup:
+                message_buttons[message_id] = reply_markup
+
             await update.message.reply_text("✅ Post replaced successfully!")
 
         except Exception as e:
             await update.message.reply_text(f"❌ {e}")
 
         user_data[user_id] = {}
+
 
 # ---------- MAIN ----------
 def main():
@@ -198,6 +207,7 @@ def main():
     app.add_handler(MessageHandler(filters.ALL, handle_message))
 
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
