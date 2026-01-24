@@ -74,7 +74,7 @@ def handle_message(update: Update, context: CallbackContext):
         user_data[user_id] = {"step": "awaiting_post"}
 
 def main():
-    updater = Updater(TOKEN)
+    updater = Updater(BOT_TOKEN)
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
