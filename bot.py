@@ -2,35 +2,21 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes
 import re
 import os
-
-CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+from buttons import BTN_LIST  # import dynamic button list
 
 # ===== CONFIG =====
-
-# Private channel username (without @)
-CHANNEL_USERNAME = "YourPrivateChannel"
-
-# Replace Button URLs
-BTN1 = "https://t.me/Hanime_hentai69_bot?start=BQADAQAD5ggAAkeKiUXzmHA-_Ip-6hYE"
-BTN2 = "https://t.me/Hanime_hentai69_bot?start=BQADAQAD7QgAAkeKiUXCgQE095X8WxYE"
-BTN3 = "https://t.me/Hanime_hentai69_bot?start=BQADAQAD-ggAAkeKiUWYqvqRl7PwUxYE"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 # ===================
-
 
 def extract_post_id(link: str):
     match = re.search(r"/(\d+)$", link)
     return int(match.group(1)) if match else None
 
-
 def default_keyboard():
-    keyboard = [
-        [InlineKeyboardButton("Button 1", url=BTN1)],
-        [InlineKeyboardButton("Button 2", url=BTN2)],
-        [InlineKeyboardButton("Button 3", url=BTN3)]
-    ]
+    # dynamically create buttons from BTN_LIST
+    keyboard = [[InlineKeyboardButton(f"Button {i+1}", url=url)] for i, url in enumerate(BTN_LIST)]
     return InlineKeyboardMarkup(keyboard)
-
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -41,7 +27,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/replace_buttons <channel_post_link>\n\n"
         "Use command by replying to a message."
     )
-
 
 # --- Replace Text ---
 async def replace_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -62,14 +47,13 @@ async def replace_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Replied message has no text.")
 
     await context.bot.edit_message_text(
-        chat_id=f"@{CHANNEL_USERNAME}",
+        chat_id=CHANNEL_ID,
         message_id=post_id,
         text=new_text,
         reply_markup=default_keyboard()
     )
 
     await update.message.reply_text("✅ Text replaced successfully.")
-
 
 # --- Replace Media ---
 async def replace_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -88,15 +72,14 @@ async def replace_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if msg.photo:
         file_id = msg.photo[-1].file_id
         await context.bot.edit_message_media(
-            chat_id=f"@{CHANNEL_USERNAME}",
+            chat_id=CHANNEL_ID,
             message_id=post_id,
             media={"type": "photo", "media": file_id, "caption": msg.caption or ""}
         )
-
     elif msg.video:
         file_id = msg.video.file_id
         await context.bot.edit_message_media(
-            chat_id=f"@{CHANNEL_USERNAME}",
+            chat_id=CHANNEL_ID,
             message_id=post_id,
             media={"type": "video", "media": file_id, "caption": msg.caption or ""}
         )
@@ -104,7 +87,6 @@ async def replace_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Reply must contain photo or video.")
 
     await update.message.reply_text("✅ Media replaced successfully.")
-
 
 # --- Replace Buttons Only ---
 async def replace_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -116,13 +98,12 @@ async def replace_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Invalid channel post link.")
 
     await context.bot.edit_message_reply_markup(
-        chat_id=f"@{CHANNEL_USERNAME}",
+        chat_id=CHANNEL_ID,
         message_id=post_id,
         reply_markup=default_keyboard()
     )
 
     await update.message.reply_text("✅ Buttons replaced successfully.")
-
 
 # --- Main Runner ---
 def main():
@@ -135,7 +116,6 @@ def main():
 
     print("Bot is running...")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
