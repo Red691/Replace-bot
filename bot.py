@@ -1,19 +1,21 @@
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters
+
+# Read bot token from Heroku Config Vars
+BOT_TOKEN = os.environ.get("BOT_TOKEN")  # Make sure this is set in Heroku Config Vars
+
 # Dictionary to store temporary data per user
-
-BOT_TOKEN = os.environ.get("TOKEN")
-
-
 user_data = {}
 
+# /start command handler
 def start(update: Update, context: CallbackContext):
     update.message.reply_text(
         "Hello! Send me the channel post link or forward the post you want to edit."
     )
     user_data[update.message.from_user.id] = {"step": "awaiting_post"}
 
+# Message handler for links and button input
 def handle_message(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     text = update.message.text
@@ -50,6 +52,7 @@ def handle_message(update: Update, context: CallbackContext):
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         try:
+            # Extract chat_id and message_id from t.me/c/<channel_id>/<message_id>
             if "t.me/c/" in post_link:
                 parts = post_link.split("/")
                 chat_id = int("-100" + parts[-2])
@@ -68,18 +71,24 @@ def handle_message(update: Update, context: CallbackContext):
         except Exception as e:
             update.message.reply_text(f"❌ Error: {e}")
 
+        # Reset user step
         user_data[user_id] = {"step": "awaiting_post"}
 
+# Main function
 def main():
-    BOT_TOKEN = os.environ.get("TOKEN")  # Heroku Config Var key
+    if not BOT_TOKEN:
+        raise ValueError("BOT_TOKEN is not set! Make sure you set the TOKEN Config Var on Heroku.")
 
     # v20+ ApplicationBuilder
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Add handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    # Start polling
     app.run_polling()
 
+# Entry point
 if __name__ == "__main__":
     main()
