@@ -1,67 +1,55 @@
+import re
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+MAX_BUTTONS_PER_ROW = int(os.environ.get("MAX_BUTTONS_PER_ROW", 4))
 
-# ---------- Button Parser ----------
-def parse_buttons(text):
-    buttons = []
-    lines = text.strip().split("\n")
-    for line in lines:
-        if "-" in line:
-            btn_text, url = line.split("-", 1)
-            buttons.append(InlineKeyboardButton(btn_text.strip(), url=url.strip()))
-    return buttons
+def parse_buttons(button_text):
+    pattern = r"\[\((.*?)\)-/replace (.*?)\]"
+    match = re.search(pattern, button_text)
+    if not match:
+        return None, None
 
-# ---------- /new Command ----------
-async def new_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
+    buttons_raw, post_link = match.groups()
+    buttons_list = []
 
-    # Must be used in channel
-    if message.chat.type != "channel":
-        await message.reply_text("❌ Ye command sirf channel me use karo.")
-        return
+    for b in buttons_raw.split('|'):
+        text, url = b.strip().split(' - ')
+        buttons_list.append(InlineKeyboardButton(text, url=url.strip()))
 
-    # Must reply to a post
-    if not message.reply_to_message:
-        await message.reply_text("❌ Kisi channel post ko reply karke /new bhejo.")
-        return
+    # Split buttons into multiple rows
+    rows = [buttons_list[i:i+MAX_BUTTONS_PER_ROW] for i in range(0, len(buttons_list), MAX_BUTTONS_PER_ROW)]
+    return rows, post_link.strip()
 
-    # Must contain button data
+async def replace_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await message.reply_text("❌ Format:\nButton text - URL")
+        await update.message.reply_text("Format: /replace [(Button1 - URL1 | Button2 - URL2)-/replace post_link]")
         return
 
-    # Parse new buttons
-    text_input = " ".join(context.args)
-    new_buttons = parse_buttons(text_input)
+    input_text = " ".join(context.args)
+    button_rows, post_link = parse_buttons(input_text)
+    if not button_rows:
+        await update.message.reply_text("Invalid format!")
+        return
 
-    # Get old buttons if exist
-    old_markup = message.reply_to_message.reply_markup
-    old_buttons = []
-    if old_markup:
-        for row in old_markup.inline_keyboard:
-            old_buttons.extend(row)
+    reply_markup = InlineKeyboardMarkup(button_rows)
 
-    # Combine old + new
-    all_buttons = old_buttons + new_buttons
+    try:
+        parts = post_link.rstrip('/').split('/')
+        chat_id = "@" + parts[-2]
+        message_id = int(parts[-1])
 
-    # Build markup (2 buttons per row)
-    rows = [all_buttons[i:i+2] for i in range(0, len(all_buttons), 2)]
-    markup = InlineKeyboardMarkup(rows)
+        await context.bot.edit_message_reply_markup(
+            chat_id=chat_id,
+            message_id=message_id,
+            reply_markup=reply_markup
+        )
+        await update.message.reply_text("✅ Buttons updated successfully!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
 
-    # Edit original channel post
-    await context.bot.edit_message_reply_markup(
-        chat_id=message.chat_id,
-        message_id=message.reply_to_message.message_id,
-        reply_markup=markup
-    )
-
-    # Confirmation
-    await message.reply_text("✅ Buttons added successfully!")
-
-# ---------- Run ----------
 app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(CommandHandler("new", new_buttons))
+app.add_handler(CommandHandler("replace", replace_buttons))
 app.run_polling()
