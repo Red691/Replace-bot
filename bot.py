@@ -10,7 +10,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 
 # ===== CONFIG =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))  # <-- Heroku Config Var
+ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))  # <-- Add your Telegram ID in Heroku Config Vars
 
 # ---------- ADMIN CHECK ----------
 def is_admin(update: Update):
@@ -18,12 +18,10 @@ def is_admin(update: Update):
     if user:
         return int(user.id) == ADMIN_ID
     return False
-    
-user_data = {}
-message_buttons = {}  # message_id: InlineKeyboardMarkup
 
-
-# ---------- ADMIN CHECK ----------
+# ---------- GLOBAL DATA ----------
+user_data = {}          # Tracks per-user step
+message_buttons = {}    # message_id: InlineKeyboardMarkup (buttons)
 
 # ---------- BUTTON PARSER ----------
 def parse_buttons(text: str):
@@ -35,7 +33,7 @@ def parse_buttons(text: str):
         if not row:
             continue
 
-        parts = row.split("  ")  # double space = same row
+        parts = row.split("  ")  # Double space = same row
         row_buttons = []
 
         for part in parts:
@@ -57,7 +55,6 @@ def parse_buttons(text: str):
 
     return InlineKeyboardMarkup(keyboard) if keyboard else None
 
-
 # ---------- LINK EXTRACT ----------
 def extract_ids(post_link: str):
     if "t.me/c/" not in post_link:
@@ -66,7 +63,6 @@ def extract_ids(post_link: str):
     chat_id = int("-100" + parts[-2])
     message_id = int(parts[-1])
     return chat_id, message_id
-
 
 # ---------- START ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -77,7 +73,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Send channel post link to edit buttons.")
     user_data[update.effective_user.id] = {"step": "awaiting_post_link"}
 
-
 # ---------- REPLACE ----------
 async def replace_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
@@ -87,8 +82,7 @@ async def replace_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Send channel post link you want to REPLACE.")
     user_data[update.effective_user.id] = {"step": "awaiting_replace_link"}
 
-
-# ---------- MAIN HANDLER ----------
+# ---------- MAIN MESSAGE HANDLER ----------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return
@@ -128,7 +122,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 message_id=message_id,
                 reply_markup=keyboard
             )
-            # Save buttons for later replace
             message_buttons[message_id] = keyboard
             await update.message.reply_text("✅ Buttons updated successfully!")
         except Exception as e:
@@ -196,7 +189,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         user_data[user_id] = {}
 
-
 # ---------- MAIN ----------
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -206,7 +198,6 @@ def main():
     app.add_handler(MessageHandler(filters.ALL, handle_message))
 
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
