@@ -1,55 +1,87 @@
-import re
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 import os
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+# Your bot token
+BOT_TOKEN = os environ.get("YOUR_BOT_TOKEN")
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-MAX_BUTTONS_PER_ROW = int(os.environ.get("MAX_BUTTONS_PER_ROW", 4))
+# Dictionary to store temporary data per user
+user_data = {}
 
-def parse_buttons(button_text):
-    pattern = r"\[\((.*?)\)-/replace (.*?)\]"
-    match = re.search(pattern, button_text)
-    if not match:
-        return None, None
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text(
+        "Hello! Send me the channel post link or forward the post you want to edit."
+    )
+    user_data[update.message.from_user.id] = {"step": "awaiting_post"}
 
-    buttons_raw, post_link = match.groups()
-    buttons_list = []
+def handle_message(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    text = update.message.text
 
-    for b in buttons_raw.split('|'):
-        text, url = b.strip().split(' - ')
-        buttons_list.append(InlineKeyboardButton(text, url=url.strip()))
-
-    # Split buttons into multiple rows
-    rows = [buttons_list[i:i+MAX_BUTTONS_PER_ROW] for i in range(0, len(buttons_list), MAX_BUTTONS_PER_ROW)]
-    return rows, post_link.strip()
-
-async def replace_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Format: /replace [(Button1 - URL1 | Button2 - URL2)-/replace post_link]")
+    if user_id not in user_data:
+        update.message.reply_text("Send /start first to begin.")
         return
 
-    input_text = " ".join(context.args)
-    button_rows, post_link = parse_buttons(input_text)
-    if not button_rows:
-        await update.message.reply_text("Invalid format!")
-        return
+    step = user_data[user_id].get("step")
 
-    reply_markup = InlineKeyboardMarkup(button_rows)
-
-    try:
-        parts = post_link.rstrip('/').split('/')
-        chat_id = "@" + parts[-2]
-        message_id = int(parts[-1])
-
-        await context.bot.edit_message_reply_markup(
-            chat_id=chat_id,
-            message_id=message_id,
-            reply_markup=reply_markup
+    # Step 1: User sends channel post link
+    if step == "awaiting_post":
+        user_data[user_id]["post_link"] = text
+        user_data[user_id]["step"] = "awaiting_buttons"
+        update.message.reply_text(
+            "Got it! Now send me your button format.\n\n"
+            "Format example:\n"
+            "Button text 1 - http://www.example.com/ | Button text 2 - http://www.example2.com/ | Button text 3 - http://www.example3.com/"
         )
-        await update.message.reply_text("✅ Buttons updated successfully!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
+        return
 
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(CommandHandler("replace", replace_buttons))
-app.run_polling()
+    # Step 2: User sends button format
+    if step == "awaiting_buttons":
+        post_link = user_data[user_id]["post_link"]
+
+        # Parse buttons
+        buttons_raw = [b.strip() for b in text.split("|")]
+        keyboard = []
+        for btn in buttons_raw:
+            if "-" in btn:
+                label, url = btn.split("-", 1)
+                keyboard.append([InlineKeyboardButton(label.strip(), url=url.strip())])
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        try:
+            # Extract chat_id and message_id from post link
+            # Telegram private channel links look like t.me/c/<channel_id>/<message_id>
+            if "t.me/c/" in post_link:
+                parts = post_link.split("/")
+                chat_id = int("-100" + parts[-2])  # Channel ID format for private channels
+                message_id = int(parts[-1])
+            else:
+                update.message.reply_text("Invalid channel post link format!")
+                return
+
+            # Edit the channel post with buttons
+            context.bot.edit_message_reply_markup(
+                chat_id=chat_id,
+                message_id=message_id,
+                reply_markup=reply_markup
+            )
+            update.message.reply_text("✅ Buttons added successfully!")
+
+        except Exception as e:
+            update.message.reply_text(f"❌ Error: {e}")
+
+        # Reset user step
+        user_data[user_id] = {"step": "awaiting_post"}
+
+def main():
+    updater = Updater(TOKEN)
+    dp = updater.dispatcher
+
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == "__main__":
+    main()
