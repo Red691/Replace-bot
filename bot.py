@@ -6,15 +6,15 @@ from telegram import (
     InputMediaPhoto,
     InputMediaVideo
 )
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 
 # ===== CONFIG =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))  # Heroku Config Var for admin
 
 # ----- TEMP DATA -----
-user_data = {}          # user_id -> step info
-message_buttons = {}    # message_id -> InlineKeyboardMarkup
+user_data = {}
+message_buttons = {}  # message_id: InlineKeyboardMarkup
 
 # ---------- ADMIN CHECK ----------
 def is_admin(update: Update):
@@ -25,12 +25,15 @@ def is_admin(update: Update):
 def parse_buttons(text: str):
     keyboard = []
     rows = text.split("\n")   # Enter = new row
+
     for row in rows:
         row = row.strip()
         if not row:
             continue
+
         parts = row.split("  ")  # double space = same row
         row_buttons = []
+
         for part in parts:
             part = part.strip()
             if "-" not in part:
@@ -40,8 +43,10 @@ def parse_buttons(text: str):
             if not url.startswith("http"):
                 continue
             row_buttons.append(InlineKeyboardButton(label, url=url))
+
         if row_buttons:
             keyboard.append(row_buttons)
+
     return InlineKeyboardMarkup(keyboard) if keyboard else None
 
 # ---------- LINK EXTRACT ----------
@@ -53,11 +58,36 @@ def extract_ids(post_link: str):
     message_id = int(parts[-1])
     return chat_id, message_id
 
+# ---------- TEXT FORMAT FUNCTION ----------
+def format_text(text: str, pattern: str) -> str:
+    lines = text.split("\n")
+    formatted = []
+
+    if pattern == "1":
+        # Pattern 1: alternate lines
+        for i, line in enumerate(lines):
+            formatted.append(line)
+            if i % 2 == 1:
+                formatted.append("")  # extra line
+    elif pattern == "2":
+        # Pattern 2: all lines doubled
+        for line in lines:
+            formatted.append(line)
+            formatted.append(line)
+    elif pattern == "3":
+        # Pattern 3: reverse lines
+        formatted = list(reversed(lines))
+    else:
+        formatted = lines  # default no change
+
+    return "\n".join(formatted)
+
 # ---------- START ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         await update.message.reply_text("⛔ Access Denied")
         return
+
     await update.message.reply_text("Send channel post link to edit buttons.")
     user_data[update.effective_user.id] = {"step": "awaiting_post_link"}
 
@@ -66,10 +96,19 @@ async def replace_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         await update.message.reply_text("⛔ Access Denied")
         return
+
     await update.message.reply_text(
-        "Send the post link you want to /replace."
+        "Send the post link you want to /replace. You can also send new inline buttons after content."
     )
     user_data[update.effective_user.id] = {"step": "awaiting_replace_link"}
+
+# ---------- FORMAT ----------
+async def format_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        await update.message.reply_text("⛔ Access Denied")
+        return
+    user_data[update.effective_user.id] = {"step": "awaiting_format_text"}
+    await update.message.reply_text("Send the text you want to format.")
 
 # ---------- MAIN HANDLER ----------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -81,10 +120,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     step = user_data[user_id]["step"]
+    text = update.message.text if update.message else None
 
     # ---- BUTTON EDIT FLOW ----
     if step == "awaiting_post_link":
-        user_data[user_id]["post_link"] = update.message.text
+        user_data[user_id]["post_link"] = text
         user_data[user_id]["step"] = "awaiting_buttons"
         await update.message.reply_text(
             "Send button layout (if any):\n\nNew row = Enter\nSame row = Double Space"
@@ -93,11 +133,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if step == "awaiting_buttons":
         post_link = user_data[user_id]["post_link"]
-        keyboard = parse_buttons(update.message.text)
+        keyboard = parse_buttons(text)
         chat_id, message_id = extract_ids(post_link)
         if not chat_id:
             await update.message.reply_text("❌ Invalid post link.")
             return
+
         try:
             await context.bot.edit_message_reply_markup(
                 chat_id=chat_id,
@@ -109,77 +150,70 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("✅ Buttons updated successfully!")
         except Exception as e:
             await update.message.reply_text(f"❌ {e}")
+
         user_data[user_id] = {}
         return
 
     # ---- REPLACE FLOW ----
     if step == "awaiting_replace_link":
-        user_data[user_id]["post_link"] = update.message.text
-        user_data[user_id]["step"] = "awaiting_new_file"
+        user_data[user_id]["post_link"] = text
+        user_data[user_id]["step"] = "awaiting_new_content"
         await update.message.reply_text(
-            "Step 1: Send the new file (Photo/Video) OR text with original caption."
+            "Send new Text OR Photo OR Video. You can also include inline buttons (text format)."
         )
         return
 
-    if step == "awaiting_new_file":
-        # Save the new content temporarily
-        user_data[user_id]["new_content"] = update.message
-        user_data[user_id]["step"] = "awaiting_new_buttons"
-        await update.message.reply_text(
-            "Step 2: Send new inline buttons (if any) for this post.\n\n"
-            "Format:\nLabel - URL (Double space for same row, Enter for new row)"
-        )
-        return
-
-    if step == "awaiting_new_buttons":
+    if step == "awaiting_new_content":
         post_link = user_data[user_id]["post_link"]
         chat_id, message_id = extract_ids(post_link)
         if not chat_id:
             await update.message.reply_text("❌ Invalid post link.")
-            user_data[user_id] = {}
             return
 
-        new_msg = user_data[user_id].get("new_content")
-        new_buttons = parse_buttons(update.message.text)
-        reply_markup = new_buttons or message_buttons.get(message_id, None)
-
         try:
-            original_caption = ""
-            if new_msg.photo or new_msg.video:
-                original_caption = new_msg.caption or ""
-            elif new_msg.text:
-                original_caption = new_msg.text or ""
+            # Only use original caption from file; ignore button text in caption
+            new_caption = update.message.caption or update.message.text or ""
 
-            # --- PHOTO ---
-            if new_msg.photo:
-                file_id = new_msg.photo[-1].file_id
-                media = InputMediaPhoto(media=file_id, caption=original_caption)
+            # Save buttons if user included in new text
+            new_buttons = None
+            if update.message.caption:
+                new_buttons = parse_buttons(update.message.caption)
+            elif update.message.text:
+                new_buttons = parse_buttons(update.message.text)
+
+            reply_markup = new_buttons or message_buttons.get(message_id, None)
+
+            # --- PHOTO REPLACE ---
+            if update.message.photo:
+                file_id = update.message.photo[-1].file_id
+                media = InputMediaPhoto(media=file_id, caption=new_caption)
                 await context.bot.edit_message_media(
                     chat_id=chat_id,
                     message_id=message_id,
                     media=media,
                     reply_markup=reply_markup
                 )
-            # --- VIDEO ---
-            elif new_msg.video:
-                file_id = new_msg.video.file_id
-                media = InputMediaVideo(media=file_id, caption=original_caption)
+
+            # --- VIDEO REPLACE ---
+            elif update.message.video:
+                file_id = update.message.video.file_id
+                media = InputMediaVideo(media=file_id, caption=new_caption)
                 await context.bot.edit_message_media(
                     chat_id=chat_id,
                     message_id=message_id,
                     media=media,
                     reply_markup=reply_markup
                 )
-            # --- TEXT ---
-            elif new_msg.text:
+
+            # --- TEXT ONLY REPLACE ---
+            elif update.message.text:
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=message_id,
-                    text=original_caption,
+                    text=new_caption,
                     reply_markup=reply_markup
                 )
 
-            # Save buttons for future replaces
             if reply_markup:
                 message_buttons[message_id] = reply_markup
 
@@ -189,14 +223,57 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ {e}")
 
         user_data[user_id] = {}
+        return
+
+    # ---- FORMAT FLOW ----
+    if step == "awaiting_format_text":
+        user_data[user_id]["raw_text"] = text
+        user_data[user_id]["step"] = "awaiting_format_pattern"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Pattern 1", callback_data="pattern1")],
+            [InlineKeyboardButton("Pattern 2", callback_data="pattern2")],
+            [InlineKeyboardButton("Pattern 3", callback_data="pattern3")],
+        ])
+        await update.message.reply_text("Choose a pattern:", reply_markup=keyboard)
+        return
+
+# ---------- CALLBACK HANDLER ----------
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    if user_id not in user_data:
+        return
+
+    step = user_data[user_id].get("step")
+    if step != "awaiting_format_pattern":
+        return
+
+    pattern_map = {
+        "pattern1": "1",
+        "pattern2": "2",
+        "pattern3": "3"
+    }
+    pattern = pattern_map.get(query.data, "1")
+    raw_text = user_data[user_id].get("raw_text", "")
+    formatted_text = format_text(raw_text, pattern)
+
+    await query.message.reply_text(f"✅ Formatted text:\n{formatted_text}")
+    user_data.pop(user_id)
 
 # ---------- MAIN ----------
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("replace", replace_cmd))
+    app.add_handler(CommandHandler("format", format_cmd))
     app.add_handler(MessageHandler(filters.ALL, handle_message))
+    app.add_handler(CallbackQueryHandler(handle_callback))
+
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
