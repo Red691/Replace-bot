@@ -1,8 +1,11 @@
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters
-from config import BOT_TOKEN, CHANNEL_ID
 # Dictionary to store temporary data per user
+
+BOT_TOKEN = os.environ.get("TOKEN")
+
+
 user_data = {}
 
 def start(update: Update, context: CallbackContext):
