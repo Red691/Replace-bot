@@ -15,28 +15,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     user_data[update.message.from_user.id] = {"step": "awaiting_post"}
 
-# Helper function to parse buttons dynamically
-def parse_buttons(text: str):
+# Helper function to parse buttons based on line breaks
+def parse_buttons_by_lines(text: str):
     keyboard = []
 
-    # Split by '|' first (landscape/vertical)
-    for group in text.split("|"):
-        group = group.strip()
-        if not group:
+    # Split by newlines (Enter key)
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
             continue
 
-        # Split by space for horizontal buttons
-        buttons_in_group = []
-        for btn in group.split("  "):  # double space separates horizontal buttons
-            btn = btn.strip()
+        row_buttons = []
+        # Split by spaces to get horizontal buttons
+        # We assume each button format: Label - URL
+        # User can put multiple buttons on same line separated by single space
+        for btn in line.split(" "):
             if "-" in btn:
-                label, url = btn.split("-", 1)
+                # In case URL contains "-", split only on first occurrence
+                parts = btn.split("-", 1)
+                if len(parts) != 2:
+                    continue
+                label, url = parts
                 label, url = label.strip(), url.strip()
                 if label and url:
-                    buttons_in_group.append(InlineKeyboardButton(label, url=url))
-
-        if buttons_in_group:
-            keyboard.append(buttons_in_group)
+                    row_buttons.append(InlineKeyboardButton(label, url=url))
+        if row_buttons:
+            keyboard.append(row_buttons)
 
     return keyboard
 
@@ -57,10 +61,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id]["step"] = "awaiting_buttons"
         await update.message.reply_text(
             "Got it! Now send me your button format.\n\n"
-            "Format example:\n"
-            "Horizontal buttons (same row): Button1 - URL1  Button2 - URL2\n"
-            "Vertical buttons (new row): Button1 - URL1 | Button2 - URL2 | Button3 - URL3\n"
-            "You can mix both!"
+            "Rules:\n"
+            "- Buttons on the same line → horizontal (same row)\n"
+            "- Press Enter/new line → vertical (new row)\n\n"
+            "Example:\n"
+            "Button1 - http://url1 Button2 - http://url2\n"
+            "Button3 - http://url3\n"
+            "Button4 - http://url4 Button5 - http://url5"
         )
         return
 
@@ -69,7 +76,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         post_link = user_data[user_id]["post_link"]
 
         # Parse buttons
-        keyboard = parse_buttons(text)
+        keyboard = parse_buttons_by_lines(text)
         if not keyboard:
             await update.message.reply_text(
                 "❌ No valid buttons found! Use the correct format."
