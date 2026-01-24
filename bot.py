@@ -18,8 +18,10 @@ user_data = {}
 
 # ---------- ADMIN CHECK ----------
 def is_admin(update: Update):
-    return update.effective_user.id == ADMIN_ID
-
+    try:
+        return int(update.effective_user.id) == ADMIN_ID
+    except:
+        return False
 
 # ---------- BUTTON PARSER ----------
 def parse_buttons(text: str):
