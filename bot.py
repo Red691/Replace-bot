@@ -1,18 +1,10 @@
 import os
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    InputMediaPhoto,
-    InputMediaVideo
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, InputMediaVideo
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 # ===== CONFIG =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-
-# 👉 Direct Admin ID yaha daal do
-ADMIN_ID = 123456789   # <-- apna Telegram ID yaha daalo
+ADMIN_ID = int(os.environ.get("ADMIN_ID", ""))  # <-- Heroku me set karo
 
 user_data = {}
 
@@ -26,7 +18,7 @@ def is_admin(update: Update):
 # ---------- BUTTON PARSER ----------
 def parse_buttons(text: str):
     keyboard = []
-    rows = text.split("\n")   # Enter = new row
+    rows = text.split("\n")  # Enter = new row
 
     for row in rows:
         row = row.strip()
@@ -55,7 +47,6 @@ def parse_buttons(text: str):
 
     return keyboard
 
-
 # ---------- LINK EXTRACT ----------
 def extract_ids(post_link: str):
     if "t.me/c/" not in post_link:
@@ -64,7 +55,6 @@ def extract_ids(post_link: str):
     chat_id = int("-100" + parts[-2])
     message_id = int(parts[-1])
     return chat_id, message_id
-
 
 # ---------- START ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -75,7 +65,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Send channel post link to edit buttons.")
     user_data[update.effective_user.id] = {"step": "awaiting_post_link"}
 
-
 # ---------- REPLACE COMMAND ----------
 async def replace_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
@@ -84,7 +73,6 @@ async def replace_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("Send channel post link you want to REPLACE.")
     user_data[update.effective_user.id] = {"step": "awaiting_replace_link"}
-
 
 # ---------- MAIN HANDLER ----------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -133,14 +121,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id] = {}
         return
 
-
     # ---- REPLACE FLOW ----
     if step == "awaiting_replace_link":
         user_data[user_id]["post_link"] = text
         user_data[user_id]["step"] = "awaiting_new_content"
         await update.message.reply_text("Send new Text OR Photo OR Video with caption.")
         return
-
 
     if step == "awaiting_new_content":
         post_link = user_data[user_id]["post_link"]
@@ -191,7 +177,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         user_data[user_id] = {}
 
-
 # ---------- MAIN ----------
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -201,7 +186,6 @@ def main():
     app.add_handler(MessageHandler(filters.ALL, handle_message))
 
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
