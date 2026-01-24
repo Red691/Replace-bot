@@ -2,8 +2,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import os
 
-BOT_TOKEN = "YOUR_BOT_TOKEN"
-PRIVATE_CHANNEL_ID = "@your_channel_username_or_id"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+PRIVATE_CHANNEL_ID = os.environ.get("PRIVATE_CHANNEL_ID")
 # Function to parse buttons from your format
 def parse_buttons(text):
     buttons = []
