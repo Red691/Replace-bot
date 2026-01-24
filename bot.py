@@ -1,12 +1,20 @@
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, InputMediaVideo
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+    InputMediaVideo
+)
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 # ===== CONFIG =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", ""))  # <-- Heroku me set karo
+ADMIN_ID = 123456789  # <-- Apna Telegram ID yaha daalo
 
 user_data = {}
+message_buttons = {}  # message_id: InlineKeyboardMarkup
+
 
 # ---------- ADMIN CHECK ----------
 def is_admin(update: Update):
@@ -15,10 +23,11 @@ def is_admin(update: Update):
     except:
         return False
 
+
 # ---------- BUTTON PARSER ----------
 def parse_buttons(text: str):
     keyboard = []
-    rows = text.split("\n")  # Enter = new row
+    rows = text.split("\n")   # Enter = new row
 
     for row in rows:
         row = row.strip()
@@ -45,7 +54,8 @@ def parse_buttons(text: str):
         if row_buttons:
             keyboard.append(row_buttons)
 
-    return keyboard
+    return InlineKeyboardMarkup(keyboard) if keyboard else None
+
 
 # ---------- LINK EXTRACT ----------
 def extract_ids(post_link: str):
@@ -56,6 +66,7 @@ def extract_ids(post_link: str):
     message_id = int(parts[-1])
     return chat_id, message_id
 
+
 # ---------- START ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
@@ -65,7 +76,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Send channel post link to edit buttons.")
     user_data[update.effective_user.id] = {"step": "awaiting_post_link"}
 
-# ---------- REPLACE COMMAND ----------
+
+# ---------- REPLACE ----------
 async def replace_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         await update.message.reply_text("⛔ Access Denied")
@@ -73,6 +85,7 @@ async def replace_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("Send channel post link you want to REPLACE.")
     user_data[update.effective_user.id] = {"step": "awaiting_replace_link"}
+
 
 # ---------- MAIN HANDLER ----------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -112,8 +125,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.edit_message_reply_markup(
                 chat_id=chat_id,
                 message_id=message_id,
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                reply_markup=keyboard
             )
+            # Save buttons for later replace
+            message_buttons[message_id] = keyboard
             await update.message.reply_text("✅ Buttons updated successfully!")
         except Exception as e:
             await update.message.reply_text(f"❌ {e}")
@@ -137,29 +152,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         try:
+            # Get old buttons if exist
+            reply_markup = message_buttons.get(message_id, None)
+
             new_caption = update.message.caption or update.message.text or ""
 
             # --- PHOTO REPLACE ---
             if update.message.photo:
                 file_id = update.message.photo[-1].file_id
                 media = InputMediaPhoto(media=file_id, caption=new_caption)
-
                 await context.bot.edit_message_media(
                     chat_id=chat_id,
                     message_id=message_id,
-                    media=media
-                    # ❗ reply_markup not passed → old buttons preserved automatically
+                    media=media,
+                    reply_markup=reply_markup
                 )
 
             # --- VIDEO REPLACE ---
             elif update.message.video:
                 file_id = update.message.video.file_id
                 media = InputMediaVideo(media=file_id, caption=new_caption)
-
                 await context.bot.edit_message_media(
                     chat_id=chat_id,
                     message_id=message_id,
-                    media=media
+                    media=media,
+                    reply_markup=reply_markup
                 )
 
             # --- TEXT ONLY REPLACE ---
@@ -167,7 +184,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=message_id,
-                    text=new_caption
+                    text=new_caption,
+                    reply_markup=reply_markup
                 )
 
             await update.message.reply_text("✅ Post replaced successfully!")
@@ -176,6 +194,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ {e}")
 
         user_data[user_id] = {}
+
 
 # ---------- MAIN ----------
 def main():
@@ -186,6 +205,7 @@ def main():
     app.add_handler(MessageHandler(filters.ALL, handle_message))
 
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
