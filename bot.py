@@ -15,6 +15,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     user_data[update.message.from_user.id] = {"step": "awaiting_post"}
 
+# Helper function to parse buttons dynamically
+def parse_buttons(text: str):
+    keyboard = []
+
+    # Split by '|' first (landscape/vertical)
+    for group in text.split("|"):
+        group = group.strip()
+        if not group:
+            continue
+
+        # Split by space for horizontal buttons
+        buttons_in_group = []
+        for btn in group.split("  "):  # double space separates horizontal buttons
+            btn = btn.strip()
+            if "-" in btn:
+                label, url = btn.split("-", 1)
+                label, url = label.strip(), url.strip()
+                if label and url:
+                    buttons_in_group.append(InlineKeyboardButton(label, url=url))
+
+        if buttons_in_group:
+            keyboard.append(buttons_in_group)
+
+    return keyboard
+
 # Message handler for links and button input
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -33,7 +58,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "Got it! Now send me your button format.\n\n"
             "Format example:\n"
-            "Button text 1 - http://www.example.com/ | Button text 2 - http://www.example2.com/ | Button text 3 - http://www.example3.com/"
+            "Horizontal buttons (same row): Button1 - URL1  Button2 - URL2\n"
+            "Vertical buttons (new row): Button1 - URL1 | Button2 - URL2 | Button3 - URL3\n"
+            "You can mix both!"
         )
         return
 
@@ -41,19 +68,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == "awaiting_buttons":
         post_link = user_data[user_id]["post_link"]
 
-        # Parse buttons safely
-        buttons_raw = [b.strip() for b in text.split("|")]
-        keyboard = []
-        for btn in buttons_raw:
-            if "-" in btn:
-                label, url = btn.split("-", 1)
-                label, url = label.strip(), url.strip()
-                if label and url:
-                    keyboard.append([InlineKeyboardButton(label, url=url)])
-
+        # Parse buttons
+        keyboard = parse_buttons(text)
         if not keyboard:
             await update.message.reply_text(
-                "❌ No valid buttons found! Use the format: Text - URL | Text2 - URL2"
+                "❌ No valid buttons found! Use the correct format."
             )
             return
 
@@ -69,7 +88,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("Invalid channel post link format!")
                 return
 
-            # Replace old buttons with new ones (bot's own messages only)
+            # Replace old buttons with new ones
             await context.bot.edit_message_reply_markup(
                 chat_id=chat_id,
                 message_id=message_id,
@@ -78,11 +97,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("✅ Buttons added/updated successfully!")
 
         except Exception as e:
-            # Detailed error for debugging
             error_msg = str(e)
             if "Message_id_invalid" in error_msg:
                 await update.message.reply_text(
-                    "❌ Error: Cannot edit this message. Make sure the bot posted it and the link is correct."
+                    "❌ Cannot edit this message. Make sure the bot posted it."
                 )
             else:
                 await update.message.reply_text(f"❌ Error: {error_msg}")
