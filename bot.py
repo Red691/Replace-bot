@@ -3,7 +3,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 # Read bot token from Heroku Config Vars
-BOT_TOKEN = os.environ.get("BOT_TOKEN")  # Make sure this is set in Heroku Config Vars
+BOT_TOKEN = os.environ.get("BOT_TOKEN")  # Set this in Heroku Config Vars
 
 # Dictionary to store temporary data per user
 user_data = {}
@@ -41,13 +41,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == "awaiting_buttons":
         post_link = user_data[user_id]["post_link"]
 
-        # Parse buttons
+        # Parse buttons safely
         buttons_raw = [b.strip() for b in text.split("|")]
         keyboard = []
         for btn in buttons_raw:
             if "-" in btn:
                 label, url = btn.split("-", 1)
-                keyboard.append([InlineKeyboardButton(label.strip(), url=url.strip())])
+                label, url = label.strip(), url.strip()
+                if label and url:
+                    keyboard.append([InlineKeyboardButton(label, url=url)])
+
+        if not keyboard:
+            await update.message.reply_text("❌ No valid buttons found! Use the format: Text - URL | Text2 - URL2")
+            return
 
         reply_markup = InlineKeyboardMarkup(keyboard)
 
