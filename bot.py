@@ -2,7 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 import os
 # Your bot token
-BOT_TOKEN = os environ.get("YOUR_BOT_TOKEN")
+BOT_TOKEN = os.environ.get("YOUR_BOT_TOKEN")
 
 # Dictionary to store temporary data per user
 user_data = {}
