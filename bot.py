@@ -1,6 +1,6 @@
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackContext, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 # Read bot token from Heroku Config Vars
 BOT_TOKEN = os.environ.get("BOT_TOKEN")  # Make sure this is set in Heroku Config Vars
@@ -9,19 +9,19 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")  # Make sure this is set in Heroku Confi
 user_data = {}
 
 # /start command handler
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text(
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
         "Hello! Send me the channel post link or forward the post you want to edit."
     )
     user_data[update.message.from_user.id] = {"step": "awaiting_post"}
 
 # Message handler for links and button input
-def handle_message(update: Update, context: CallbackContext):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     text = update.message.text
 
     if user_id not in user_data:
-        update.message.reply_text("Send /start first to begin.")
+        await update.message.reply_text("Send /start first to begin.")
         return
 
     step = user_data[user_id].get("step")
@@ -30,7 +30,7 @@ def handle_message(update: Update, context: CallbackContext):
     if step == "awaiting_post":
         user_data[user_id]["post_link"] = text
         user_data[user_id]["step"] = "awaiting_buttons"
-        update.message.reply_text(
+        await update.message.reply_text(
             "Got it! Now send me your button format.\n\n"
             "Format example:\n"
             "Button text 1 - http://www.example.com/ | Button text 2 - http://www.example2.com/ | Button text 3 - http://www.example3.com/"
@@ -58,18 +58,18 @@ def handle_message(update: Update, context: CallbackContext):
                 chat_id = int("-100" + parts[-2])
                 message_id = int(parts[-1])
             else:
-                update.message.reply_text("Invalid channel post link format!")
+                await update.message.reply_text("Invalid channel post link format!")
                 return
 
-            context.bot.edit_message_reply_markup(
+            await context.bot.edit_message_reply_markup(
                 chat_id=chat_id,
                 message_id=message_id,
                 reply_markup=reply_markup
             )
-            update.message.reply_text("✅ Buttons added successfully!")
+            await update.message.reply_text("✅ Buttons added successfully!")
 
         except Exception as e:
-            update.message.reply_text(f"❌ Error: {e}")
+            await update.message.reply_text(f"❌ Error: {e}")
 
         # Reset user step
         user_data[user_id] = {"step": "awaiting_post"}
@@ -77,7 +77,7 @@ def handle_message(update: Update, context: CallbackContext):
 # Main function
 def main():
     if not BOT_TOKEN:
-        raise ValueError("BOT_TOKEN is not set! Make sure you set the TOKEN Config Var on Heroku.")
+        raise ValueError("BOT_TOKEN is not set! Make sure you set BOT_TOKEN Config Var on Heroku.")
 
     # v20+ ApplicationBuilder
     app = ApplicationBuilder().token(BOT_TOKEN).build()
