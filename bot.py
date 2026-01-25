@@ -304,15 +304,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id]["collected_contents"] = collected
 
         # Check if all messages collected
-        if len(collected) < len(msg_ids):
-            await update.message.reply_text(f"✅ Stored {len(collected)}/{len(msg_ids)}. Send next message or 'skip'.")
-            return
-        else:
+        await update.message.reply_text(f"✅ Stored {len(collected)}/{len(msg_ids)}.")
+        
+        if len(collected) >= len(msg_ids):
             user_data[user_id]["new_contents"] = collected
             user_data[user_id]["step"] = "awaiting_batch_buttons"
             await update.message.reply_text("Send new button layout OR type skip for all messages.")
-            return
-
+        else:
+            await update.message.reply_text("Send next message or type 'skip'.")
     # ------------------- BATCH SAME -------------------
     if step == "awaiting_batch_same_links":
         try:
