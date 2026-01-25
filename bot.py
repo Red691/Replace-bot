@@ -437,12 +437,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             message_buttons[mid] = reply_markup
                             
                         await asyncio.sleep(0.3)
-                    except Exception as e:
+                except Exception as e:
                         errors.append(f"❌ Failed to update message {mid}: {e}")
             if errors:
                 await update.message.reply_text("\n".join(errors))
             await update.message.reply_text("✅ Batch same content completed!")
-                user_data[user_id] = {}
+            user_data[user_id] = {}
             return
 # =====================================================
 # APPLICATION SETUP
