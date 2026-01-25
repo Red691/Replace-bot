@@ -431,7 +431,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         
                         else:
                             await context.bot.edit_message_text(chat_id=chat_id, message_id=mid, text=caption, reply_markup=reply_markup)
-                        else:
+                            
                             await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=mid, reply_markup=reply_markup)
                         if reply_markup:
                             message_buttons[mid] = reply_markup
