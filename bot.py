@@ -1,7 +1,8 @@
 import os
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    InputMediaPhoto, InputMediaVideo, InputMediaDocument, InputMediaAnimation, InputMediaAudio, InputMediaVoice
+    InputMediaPhoto, InputMediaVideo, InputMediaDocument,
+    InputMediaAnimation, InputMediaAudio
 )
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
@@ -151,7 +152,7 @@ async def batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Send first and last post links separated by dash (-)\nExample:\nhttps://t.me/c/123/50 - https://t.me/c/123/60"
     )
-    user_data[update.effective_user.id] = {"step": "awaiting_batch_links"}
+    user_data[update.effective_user.id] = {"step": "awaiting_batch_links", "contents": []}
 
 # =====================================================
 #                   /batch_same
@@ -164,7 +165,7 @@ async def batch_same_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Send first and last post links separated by dash (-) for applying SAME content to all messages."
     )
-    user_data[update.effective_user.id] = {"step": "awaiting_batch_same_links"}
+    user_data[update.effective_user.id] = {"step": "awaiting_batch_same_links", "new_content": None}
 
 # =====================================================
 #                  MAIN MESSAGE HANDLER
@@ -206,7 +207,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == "awaiting_replace_link":
         user_data[user_id]["post_link"] = update.message.text
         user_data[user_id]["step"] = "awaiting_new_file"
-        await update.message.reply_text("Send new content (Photo/Video/Document/Audio/Voice/GIF/Text) or type skip")
+        await update.message.reply_text(
+            "Send new content (Photo/Video/Document/Audio/Voice/Animation/GIF/Sticker/Text) or type skip"
+        )
         return
 
     if step == "awaiting_new_file":
@@ -230,33 +233,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = new_buttons or message_buttons.get(message_id, None)
 
         try:
-            # --- Send media or edit text ---
             if new_msg:
                 caption = new_msg.caption or new_msg.text or ""
                 if new_msg.photo:
                     media = InputMediaPhoto(new_msg.photo[-1].file_id, caption=caption)
-                    await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
+                    await context.bot.edit_message_media(chat_id, message_id, media=media, reply_markup=reply_markup)
                 elif new_msg.video:
                     media = InputMediaVideo(new_msg.video.file_id, caption=caption)
-                    await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
+                    await context.bot.edit_message_media(chat_id, message_id, media=media, reply_markup=reply_markup)
                 elif new_msg.document:
                     media = InputMediaDocument(new_msg.document.file_id, caption=caption)
-                    await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
+                    await context.bot.edit_message_media(chat_id, message_id, media=media, reply_markup=reply_markup)
                 elif new_msg.audio:
                     media = InputMediaAudio(new_msg.audio.file_id, caption=caption)
-                    await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
+                    await context.bot.edit_message_media(chat_id, message_id, media=media, reply_markup=reply_markup)
+                elif new_msg.voice:
+                    media = InputMediaAudio(new_msg.voice.file_id, caption=caption)  # Voice fix
+                    await context.bot.edit_message_media(chat_id, message_id, media=media, reply_markup=reply_markup)
                 elif new_msg.animation:
                     media = InputMediaAnimation(new_msg.animation.file_id, caption=caption)
-                    await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
-                elif new_msg.voice:
-                    media = InputMediaVoice(new_msg.voice.file_id, caption=caption)
-                    await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
+                    await context.bot.edit_message_media(chat_id, message_id, media=media, reply_markup=reply_markup)
                 elif new_msg.sticker:
-                    await context.bot.send_sticker(chat_id=chat_id, sticker=new_msg.sticker.file_id)
+                    await context.bot.send_sticker(chat_id, new_msg.sticker.file_id)
                 else:
                     await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=caption, reply_markup=reply_markup)
             else:
-                await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=reply_markup)
+                await context.bot.edit_message_reply_markup(chat_id, message_id, reply_markup=reply_markup)
 
             if reply_markup:
                 message_buttons[message_id] = reply_markup
@@ -264,6 +266,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("✅ Post replaced successfully!")
         except Exception as e:
             await update.message.reply_text(f"❌ {e}")
+
         user_data[user_id] = {}
         return
 
