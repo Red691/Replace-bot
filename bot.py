@@ -220,14 +220,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id, message_id = extract_ids(post_link)
 
         try:
-            await context.bot.edit_message_reply_markup(
-                chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=keyboard
-            )
-            if keyboard:
+            if keyboard != message_buttons.get(message_id):
+                await context.bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    reply_markup=keyboard
+                )
                 message_buttons[message_id] = keyboard
-            await update.message.reply_text("✅ Buttons updated!")
+                await update.message.reply_text("✅ Buttons updated!")
+            else:
+                await update.message.reply_text("⚠️ Buttons are same, nothing changed.")
         except Exception as e:
             await update.message.reply_text(f"❌ {e}")
 
@@ -262,23 +264,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = new_buttons or message_buttons.get(message_id, None)
 
         try:
+            edit_needed = False
             if new_msg:
                 caption = new_msg.caption or new_msg.text or ""
                 if new_msg.photo:
+                    edit_needed = True
                     media = InputMediaPhoto(media=new_msg.photo[-1].file_id, caption=caption)
                     await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
                 elif new_msg.video:
+                    edit_needed = True
                     media = InputMediaVideo(media=new_msg.video.file_id, caption=caption)
                     await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
                 else:
-                    await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=caption, reply_markup=reply_markup)
+                    if caption != (new_msg.text or "") or reply_markup != message_buttons.get(message_id):
+                        edit_needed = True
+                        await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=caption, reply_markup=reply_markup)
             else:
-                await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=reply_markup)
+                if reply_markup != message_buttons.get(message_id):
+                    edit_needed = True
+                    await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=reply_markup)
 
             if reply_markup:
                 message_buttons[message_id] = reply_markup
 
-            await update.message.reply_text("✅ Post replaced successfully!")
+            await update.message.reply_text(
+                "✅ Post replaced successfully!" if edit_needed else "⚠️ Nothing changed, no edits applied."
+            )
 
         except Exception as e:
             await update.message.reply_text(f"❌ {e}")
@@ -329,6 +340,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_last = new_buttons or message_buttons.get(last_msg_id, None)
 
         try:
+            edit_needed = False
             for chat_id, msg_id, reply_markup in [
                 (first_chat_id, first_msg_id, reply_first),
                 (last_chat_id, last_msg_id, reply_last)
@@ -336,20 +348,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if new_msg:
                     caption = new_msg.caption or new_msg.text or ""
                     if new_msg.photo:
+                        edit_needed = True
                         media = InputMediaPhoto(media=new_msg.photo[-1].file_id, caption=caption)
                         await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
                     elif new_msg.video:
+                        edit_needed = True
                         media = InputMediaVideo(media=new_msg.video.file_id, caption=caption)
                         await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
                     else:
-                        await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=caption, reply_markup=reply_markup)
+                        if caption != (new_msg.text or "") or reply_markup != message_buttons.get(msg_id):
+                            edit_needed = True
+                            await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=caption, reply_markup=reply_markup)
                 else:
-                    await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=reply_markup)
+                    if reply_markup != message_buttons.get(msg_id):
+                        edit_needed = True
+                        await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=reply_markup)
 
                 if reply_markup:
                     message_buttons[msg_id] = reply_markup
 
-            await update.message.reply_text("✅ Batch replace done successfully!")
+            await update.message.reply_text(
+                "✅ Batch replace done successfully!" if edit_needed else "⚠️ Nothing changed, no edits applied."
+            )
+
         except Exception as e:
             await update.message.reply_text(f"❌ {e}")
 
