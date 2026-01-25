@@ -402,7 +402,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=caption, reply_markup=reply_markup)
                 else:
                     await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=reply_markup)
-    if reply_markup:
+                    if reply_markup:
                     message_buttons[msg_id] = reply_markup
             except Exception as e:
                 await update.message.reply_text(f"❌ Failed to update message {msg_id}: {e}")
