@@ -265,55 +265,48 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id] = {}
         return
 
-    # ----- BATCH -----
-    if step == "awaiting_batch_links":
+    # ----- BATCH SAME -----
+    if step == "awaiting_batch_same_links":
         try:
             first_link, last_link = map(str.strip, update.message.text.split("-", 1))
         except:
             await update.message.reply_text("❌ Invalid format. Send like:\nlink1 - link2")
             return
+
         first_chat, first_msg = extract_ids(first_link)
         last_chat, last_msg = extract_ids(last_link)
         if first_chat != last_chat:
             await update.message.reply_text("❌ First and last messages must be from the same chat")
             return
+
         msg_ids = list(range(first_msg, last_msg + 1))
         user_data[user_id]["msg_ids"] = msg_ids
         user_data[user_id]["chat_id"] = first_chat
-        user_data[user_id]["step"] = "awaiting_batch_content"
-        user_data[user_id]["new_contents"] = []
-        await update.message.reply_text(f"Send new content for {len(msg_ids)} messages sequentially, or type skip for each")
+        user_data[user_id]["step"] = "awaiting_batch_same_content"
+        await update.message.reply_text(f"Send new content for all {len(msg_ids)} messages or type skip")
         return
 
-    if step == "awaiting_batch_content":
-        msg_ids = user_data[user_id]["msg_ids"]
+    if step == "awaiting_batch_same_content":
         if update.message.text and update.message.text.lower() == "skip":
-            user_data[user_id]["new_contents"].append(None)
+            content = None
         else:
-            user_data[user_id]["new_contents"].append(update.message)
-
-        remaining = len(msg_ids) - len(user_data[user_id]["new_contents"])
-        if remaining > 0:
-            await update.message.reply_text(f"Send next content for {remaining} messages, or type skip")
-            return
-
-        # All messages collected, move to button step
-        user_data[user_id]["step"] = "awaiting_batch_buttons"
+            content = update.message
+        user_data[user_id]["new_content"] = content
+        user_data[user_id]["step"] = "awaiting_batch_same_buttons"
         await update.message.reply_text("Send new button layout OR type skip")
         return
 
-    if step == "awaiting_batch_buttons":
+    if step == "awaiting_batch_same_buttons":
         msg_ids = user_data[user_id]["msg_ids"]
         chat_id = user_data[user_id]["chat_id"]
-        new_contents = user_data[user_id]["new_contents"]
+        content = user_data[user_id]["new_content"]
 
         if update.message.text.lower() == "skip":
-            reply_markup_list = [message_buttons.get(msg_id, None) for msg_id in msg_ids]
+            reply_markup = None
         else:
-            new_buttons = parse_buttons(update.message.text)
-            reply_markup_list = [new_buttons or message_buttons.get(msg_id, None) for msg_id in msg_ids]
+            reply_markup = parse_buttons(update.message.text)
 
-        for msg_id, content, reply_markup in zip(msg_ids, new_contents, reply_markup_list):
+        for msg_id in msg_ids:
             try:
                 if content:
                     caption = content.caption or content.text or ""
@@ -344,7 +337,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 await update.message.reply_text(f"❌ Failed to update message {msg_id}: {e}")
 
-        await update.message.reply_text("✅ Batch replace completed!")
+        await update.message.reply_text("✅ Batch same content completed!")
         user_data[user_id] = {}
         return
 
