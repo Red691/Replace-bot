@@ -6,15 +6,26 @@ from telegram import (
     InputMediaPhoto,
     InputMediaVideo
 )
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters
+)
 
 # ===== CONFIG =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))  # Set in Heroku Config Vars
+ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))
+
+MAIN_CHANNEL = "https://t.me/YourChannel"
+SUPPORT_GROUP = "https://t.me/YourSupportGroup"
+OWNER_USERNAME = "@YourUsername"
 
 # ===== DATA =====
-user_data = {}          
-message_buttons = {}    # message_id -> InlineKeyboardMarkup
+user_data = {}
+message_buttons = {}
 
 
 # ---------- ADMIN CHECK ----------
@@ -31,10 +42,8 @@ def parse_buttons(text: str):
         row = row.strip()
         if not row:
             continue
-
         parts = row.split("  ")
         row_buttons = []
-
         for part in parts:
             part = part.strip()
             if "-" not in part:
@@ -44,10 +53,8 @@ def parse_buttons(text: str):
             if not url.startswith("http"):
                 continue
             row_buttons.append(InlineKeyboardButton(label, url=url))
-
         if row_buttons:
             keyboard.append(row_buttons)
-
     return InlineKeyboardMarkup(keyboard) if keyboard else None
 
 
@@ -65,26 +72,23 @@ def extract_ids(post_link: str):
 #                     /START
 # =====================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Public Start (No admin check)
 
     intro_text = (
         "✨ **Welcome to Post Manager Bot** ✨\n\n"
-        "This bot helps manage channel posts.\n"
-        "Replace media, captions and buttons easily.\n\n"
-        "Use admin commands to manage posts."
+        "This bot helps manage Telegram channel posts.\n"
+        "Replace media, captions and buttons easily."
     )
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📢 Main Channel", url="https://t.me/YourChannel")],
+        [InlineKeyboardButton("📢 Main Channel", url=MAIN_CHANNEL)],
         [
             InlineKeyboardButton("ℹ️ About", callback_data="about"),
             InlineKeyboardButton("❓ Help", callback_data="help")
         ]
     ])
 
-    # Send intro photo (optional)
     await update.message.reply_photo(
-        photo="https://i.imgur.com/3ZQ3ZQp.jpg",  # replace with your intro image URL
+        photo="https://i.imgur.com/3ZQ3ZQp.jpg",
         caption=intro_text,
         reply_markup=keyboard,
         parse_mode="Markdown"
@@ -92,7 +96,80 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =====================================================
-#                /rep_btn  (Old Start)
+#              CALLBACK QUERY HANDLER
+# =====================================================
+async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    # ---------- ABOUT ----------
+    if query.data == "about":
+        text = (
+            "👤 **Owner:** " + OWNER_USERNAME + "\n"
+            "💻 **Developer:** " + OWNER_USERNAME + "\n\n"
+            "This bot is built for managing Telegram channel posts."
+        )
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Back", callback_data="home")]
+        ])
+
+        await query.edit_message_caption(
+            caption=text,
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+
+    # ---------- HELP ----------
+    elif query.data == "help":
+        text = (
+            "❓ **How To Use**\n\n"
+            "/rep_btn → Edit only buttons of post\n"
+            "/replace → Replace post media/text\n\n"
+            "⚠️ Commands work for Admin only."
+        )
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔁 Replace Command Info", callback_data="cmd_replace")],
+            [InlineKeyboardButton("💬 Support Group", url=SUPPORT_GROUP)],
+            [InlineKeyboardButton("🔙 Back", callback_data="home")]
+        ])
+
+        await query.edit_message_caption(
+            caption=text,
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+
+    # ---------- HOME ----------
+    elif query.data == "home":
+        intro_text = (
+            "✨ **Welcome to Post Manager Bot** ✨\n\n"
+            "This bot helps manage Telegram channel posts.\n"
+            "Replace media, captions and buttons easily."
+        )
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📢 Main Channel", url=MAIN_CHANNEL)],
+            [
+                InlineKeyboardButton("ℹ️ About", callback_data="about"),
+                InlineKeyboardButton("❓ Help", callback_data="help")
+            ]
+        ])
+
+        await query.edit_message_caption(
+            caption=intro_text,
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+
+    # ---------- SMALL ALERT ----------
+    elif query.data == "cmd_replace":
+        await query.answer("Use /replace command in chat", show_alert=True)
+
+
+# =====================================================
+#              /rep_btn  (BUTTON EDIT)
 # =====================================================
 async def rep_btn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
@@ -111,7 +188,7 @@ async def replace_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Access Denied")
         return
 
-    await update.message.reply_text("Send the post link you want to /replace.")
+    await update.message.reply_text("Send the post link you want to replace.")
     user_data[update.effective_user.id] = {"step": "awaiting_replace_link"}
 
 
@@ -128,12 +205,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     step = user_data[user_id]["step"]
 
-    # ---------- BUTTON EDIT FLOW ----------
+    # ---- BUTTON EDIT ----
     if step == "awaiting_post_link":
         user_data[user_id]["post_link"] = update.message.text
         user_data[user_id]["step"] = "awaiting_buttons"
         await update.message.reply_text(
-            "Send button layout:\n\nLabel - URL\nDouble space = same row\nEnter = new row"
+            "Send button layout:\nLabel - URL\nDouble space = same row\nEnter = new row"
         )
         return
 
@@ -141,10 +218,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         post_link = user_data[user_id]["post_link"]
         keyboard = parse_buttons(update.message.text)
         chat_id, message_id = extract_ids(post_link)
-
-        if not chat_id:
-            await update.message.reply_text("❌ Invalid post link.")
-            return
 
         try:
             await context.bot.edit_message_reply_markup(
@@ -155,7 +228,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if keyboard:
                 message_buttons[message_id] = keyboard
 
-            await update.message.reply_text("✅ Buttons updated successfully!")
+            await update.message.reply_text("✅ Buttons updated!")
 
         except Exception as e:
             await update.message.reply_text(f"❌ {e}")
@@ -163,76 +236,43 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id] = {}
         return
 
-
-    # ---------- REPLACE FLOW ----------
+    # ---- REPLACE ----
     if step == "awaiting_replace_link":
         user_data[user_id]["post_link"] = update.message.text
         user_data[user_id]["step"] = "awaiting_new_file"
-        await update.message.reply_text(
-            "Step 1: Send new Photo / Video / Text (with caption if needed)."
-        )
+        await update.message.reply_text("Send new Photo / Video / Text")
         return
-
 
     if step == "awaiting_new_file":
         user_data[user_id]["new_content"] = update.message
         user_data[user_id]["step"] = "awaiting_new_buttons"
-        await update.message.reply_text(
-            "Step 2: Send new button layout OR send `skip` to keep old buttons."
-        )
+        await update.message.reply_text("Send new button layout OR type skip")
         return
-
 
     if step == "awaiting_new_buttons":
         post_link = user_data[user_id]["post_link"]
         chat_id, message_id = extract_ids(post_link)
-        if not chat_id:
-            await update.message.reply_text("❌ Invalid post link.")
-            user_data[user_id] = {}
-            return
-
         new_msg = user_data[user_id]["new_content"]
 
-        # If skip → keep old
         if update.message.text.lower() == "skip":
             reply_markup = message_buttons.get(message_id, None)
         else:
             new_buttons = parse_buttons(update.message.text)
             reply_markup = new_buttons or message_buttons.get(message_id, None)
 
+        caption = new_msg.caption or new_msg.text or ""
+
         try:
-            caption = new_msg.caption or new_msg.text or ""
-
-            # PHOTO
             if new_msg.photo:
-                file_id = new_msg.photo[-1].file_id
-                media = InputMediaPhoto(media=file_id, caption=caption)
-                await context.bot.edit_message_media(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    media=media,
-                    reply_markup=reply_markup
-                )
+                media = InputMediaPhoto(media=new_msg.photo[-1].file_id, caption=caption)
+                await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
 
-            # VIDEO
             elif new_msg.video:
-                file_id = new_msg.video.file_id
-                media = InputMediaVideo(media=file_id, caption=caption)
-                await context.bot.edit_message_media(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    media=media,
-                    reply_markup=reply_markup
-                )
+                media = InputMediaVideo(media=new_msg.video.file_id, caption=caption)
+                await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
 
-            # TEXT
-            elif new_msg.text:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=caption,
-                    reply_markup=reply_markup
-                )
+            else:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=caption, reply_markup=reply_markup)
 
             if reply_markup:
                 message_buttons[message_id] = reply_markup
@@ -246,14 +286,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =====================================================
-#                     MAIN
+#                       MAIN
 # =====================================================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("rep_btn", rep_btn))   # old start
+    app.add_handler(CommandHandler("rep_btn", rep_btn))
     app.add_handler(CommandHandler("replace", replace_cmd))
+    app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.ALL, handle_message))
 
     app.run_polling()
