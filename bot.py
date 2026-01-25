@@ -74,7 +74,7 @@ def extract_ids(post_link: str):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     intro_text = (
-        "✨ **Welcome to Post Manager Bot** ✨\n\n"
+        "Welcome to Post Manager Bot\n\n"
         "This bot helps manage Telegram channel posts.\n"
         "Replace media, captions and buttons easily."
     )
@@ -90,8 +90,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_photo(
         photo="https://i.imgur.com/3ZQ3ZQp.jpg",
         caption=intro_text,
-        reply_markup=keyboard,
-        parse_mode="Markdown"
+        reply_markup=keyboard
     )
 
 
@@ -102,26 +101,17 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    async def edit(query, text, keyboard):
-        # If original message had photo -> edit caption
+    async def edit(text, keyboard):
         if query.message.photo:
-            await query.edit_message_caption(
-                caption=text,
-                reply_markup=keyboard,
-                parse_mode="Markdown"
-            )
+            await query.edit_message_caption(caption=text, reply_markup=keyboard)
         else:
-            await query.edit_message_text(
-                text=text,
-                reply_markup=keyboard,
-                parse_mode="Markdown"
-            )
+            await query.edit_message_text(text=text, reply_markup=keyboard)
 
     # ---------- ABOUT ----------
     if query.data == "about":
         text = (
-            "👤 **Owner:** " + OWNER_USERNAME + "\n"
-            "💻 **Developer:** " + OWNER_USERNAME + "\n\n"
+            f"Owner: {OWNER_USERNAME}\n"
+            f"Developer: {OWNER_USERNAME}\n\n"
             "This bot is built for managing Telegram channel posts."
         )
 
@@ -129,15 +119,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Back", callback_data="home")]
         ])
 
-        await edit(query, text, keyboard)
+        await edit(text, keyboard)
 
     # ---------- HELP ----------
     elif query.data == "help":
         text = (
-            "❓ **How To Use**\n\n"
-            "/rep_btn → Edit only buttons of post\n"
-            "/replace → Replace post media/text\n\n"
-            "⚠️ Commands work for Admin only."
+            "How To Use\n\n"
+            "/rep_btn  - Edit only buttons of a post\n"
+            "/replace  - Replace post media or text\n\n"
+            "Commands work for Admin only."
         )
 
         keyboard = InlineKeyboardMarkup([
@@ -146,12 +136,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Back", callback_data="home")]
         ])
 
-        await edit(query, text, keyboard)
+        await edit(text, keyboard)
 
     # ---------- HOME ----------
     elif query.data == "home":
         text = (
-            "✨ **Welcome to Post Manager Bot** ✨\n\n"
+            "Welcome to Post Manager Bot\n\n"
             "This bot helps manage Telegram channel posts.\n"
             "Replace media, captions and buttons easily."
         )
@@ -164,14 +154,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         ])
 
-        await edit(query, text, keyboard)
+        await edit(text, keyboard)
 
     # ---------- ALERT ----------
     elif query.data == "cmd_replace":
         await query.answer("Use /replace command in chat", show_alert=True)
 
+
 # =====================================================
-#              /rep_btn  (BUTTON EDIT)
+#              /rep_btn
 # =====================================================
 async def rep_btn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
