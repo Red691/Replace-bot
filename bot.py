@@ -1,4 +1,5 @@
 import os
+import asyncio
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -274,13 +275,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             await update.message.reply_text("❌ Invalid format. Send like:\nlink1 - link2")
             return
-
         first_chat, first_msg = extract_ids(first_link)
         last_chat, last_msg = extract_ids(last_link)
         if first_chat != last_chat:
             await update.message.reply_text("❌ First and last messages must be from the same chat")
             return
-
         msg_ids = list(range(first_msg, last_msg + 1))
         user_data[user_id]["msg_ids"] = msg_ids
         user_data[user_id]["chat_id"] = first_chat
@@ -308,52 +307,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Send new button layout OR type skip for all messages.")
             return
 
-    if step == "awaiting_batch_buttons":
-        msg_ids = user_data[user_id]["msg_ids"]
-        chat_id = user_data[user_id]["chat_id"]
-        new_contents = user_data[user_id]["new_contents"]
-
-        if update.message.text.lower() == "skip":
-            reply_markup_list = [message_buttons.get(msg_id, None) for msg_id in msg_ids]
-        else:
-            new_buttons = parse_buttons(update.message.text)
-            reply_markup_list = [new_buttons or message_buttons.get(msg_id, None) for msg_id in msg_ids]
-
-        for msg_id, content, reply_markup in zip(msg_ids, new_contents, reply_markup_list):
-            try:
-                if content:
-                    caption = content.caption or content.text or ""
-                    if content.photo:
-                        media = InputMediaPhoto(media=content.photo[-1].file_id, caption=caption)
-                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
-                    elif content.video:
-                        media = InputMediaVideo(media=content.video.file_id, caption=caption)
-                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
-                    elif content.document:
-                        media = InputMediaDocument(media=content.document.file_id, caption=caption)
-                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
-                    elif content.animation:
-                        media = InputMediaAnimation(media=content.animation.file_id, caption=caption)
-                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
-                    elif content.audio:
-                        media = InputMediaAudio(media=content.audio.file_id, caption=caption)
-                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
-                    elif content.sticker:
-                        await context.bot.send_sticker(chat_id=chat_id, sticker=content.sticker.file_id)
-                    else:
-                        await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=caption, reply_markup=reply_markup)
-                else:
-                    await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=reply_markup)
-
-                if reply_markup:
-                    message_buttons[msg_id] = reply_markup
-            except Exception as e:
-                await update.message.reply_text(f"❌ Failed to update message {msg_id}: {e}")
-
-        await update.message.reply_text("✅ Batch replace completed!")
-        user_data[user_id] = {}
-        return
-
     # ----- BATCH SAME (same content for all messages) -----
     if step == "awaiting_batch_same_links":
         try:
@@ -361,13 +314,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             await update.message.reply_text("❌ Invalid format. Send like:\nlink1 - link2")
             return
-
         first_chat, first_msg = extract_ids(first_link)
         last_chat, last_msg = extract_ids(last_link)
         if first_chat != last_chat:
             await update.message.reply_text("❌ First and last messages must be from the same chat")
             return
-
         msg_ids = list(range(first_msg, last_msg + 1))
         user_data[user_id]["msg_ids"] = msg_ids
         user_data[user_id]["chat_id"] = first_chat
@@ -385,73 +336,120 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Send new button layout OR type skip")
         return
 
-    if step == "awaiting_batch_same_buttons":
-        msg_ids = user_data[user_id]["msg_ids"]
-        chat_id = user_data[user_id]["chat_id"]
-        content = user_data[user_id]["new_content"]
-
-        if update.message.text.lower() == "skip":
-            reply_markup = None
-        else:
-            reply_markup = parse_buttons(update.message.text)
-
-        for msg_id in msg_ids:
-            try:
-                if content:
-                    caption = content.caption or content.text or ""
-                    if content.photo:
-                        media = InputMediaPhoto(media=content.photo[-1].file_id, caption=caption)
-                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
-                    elif content.video:
-                        media = InputMediaVideo(media=content.video.file_id, caption=caption)
-                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
-                    elif content.document:
-                        media = InputMediaDocument(media=content.document.file_id, caption=caption)
-                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
-                    elif content.animation:
-                        media = InputMediaAnimation(media=content.animation.file_id, caption=caption)
-                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
-                    elif content.audio:
-                        media = InputMediaAudio(media=content.audio.file_id, caption=caption)
-                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media,reply_markup=reply_markup)
-                    elif content.sticker:
-                        await context.bot.send_sticker(chat_id=chat_id, sticker=content.sticker.file_id)
+    # ----- APPLY BATCH & BATCH SAME FIXED WITH TIMEOUT -----
+    if step in ["awaiting_batch_buttons", "awaiting_batch_same_buttons"]:
+        errors = []
+        if step == "awaiting_batch_buttons":
+            msg_ids = user_data[user_id]["msg_ids"]
+            chat_id = user_data[user_id]["chat_id"]
+            new_contents = user_data[user_id]["new_contents"]
+            if update.message.text.lower() == "skip":
+                reply_markup_list = [message_buttons.get(msg_id, None) for msg_id in msg_ids]
+            else:
+                new_buttons = parse_buttons(update.message.text)
+                reply_markup_list = [new_buttons or message_buttons.get(msg_id, None) for msg_id in msg_ids]
+            for msg_id, content, reply_markup in zip(msg_ids, new_contents, reply_markup_list):
+                try:
+                    if content:
+                        caption = content.caption or content.text or ""
+                        if content.photo:
+                            media = InputMediaPhoto(media=content.photo[-1].file_id, caption=caption)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
+                        elif content.video:
+                            media = InputMediaVideo(media=content.video.file_id, caption=caption)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
+                        elif content.document:
+                            media = InputMediaDocument(media=content.document.file_id, caption=caption)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
+                        elif content.animation:
+                            media = InputMediaAnimation(media=content.animation.file_id, caption=caption)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
+                        elif content.audio:
+                            media = InputMediaAudio(media=content.audio.file_id, caption=caption)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
+                        elif content.sticker:
+                            await context.bot.send_sticker(chat_id=chat_id, sticker=content.sticker.file_id)
+                        else:
+                            await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=caption, reply_markup=reply_markup)
                     else:
-                        await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=caption, reply_markup=reply_markup)
-                else:
-                    await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=reply_markup)
+                        await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=reply_markup)
+                    if reply_markup:
+                        message_buttons[msg_id] = reply_markup
+                    await asyncio.sleep(0.3)
+                except Exception as e:
+                    errors.append(f"❌ Failed to update message {msg_id}: {e}")
+            if errors:
+                await update.message.reply_text("\n".join(errors))
+            await update.message.reply_text("✅ Batch replace completed!")
+            user_data[user_id] = {}
+            return
 
-                if reply_markup:
-                    message_buttons[msg_id] = reply_markup
-            except Exception as e:
-                await update.message.reply_text(f"❌ Failed to update message {msg_id}: {e}")
+        if step == "awaiting_batch_same_buttons":
+            msg_ids = user_data[user_id]["msg_ids"]
+            chat_id = user_data[user_id]["chat_id"]
+            content = user_data[user_id]["new_content"]
+            if update.message.text.lower() == "skip":
+                reply_markup = None
+            else:
+                reply_markup = parse_buttons(update.message.text)
+            for msg_id in msg_ids:
+                try:
+                    if content:
+                        caption = content.caption or content.text or ""
+                        if content.photo:
+                            media = InputMediaPhoto(media=content.photo[-1].file_id, caption=caption)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
+                        elif content.video:
+                            media = InputMediaVideo(media=content.video.file_id, caption=caption)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
+                        elif content.document:
+                            media = InputMediaDocument(media=content.document.file_id, caption=caption)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
+                        elif content.animation:
+                            media = InputMediaAnimation(media=content.animation.file_id, caption=caption)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
+                        elif content.audio:
+                            media = InputMediaAudio(media=content.audio.file_id, caption=caption)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
+                        elif content.sticker:
+                            await context.bot.send_sticker(chat_id=chat_id, sticker=content.sticker.file_id)
+                        else:
+                            await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=caption, reply_markup=reply_markup)
+                    else:
+                        await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=reply_markup)
 
-        await update.message.reply_text("✅ Batch same content completed!")
-        user_data[user_id] = {}
-        return
+                    if reply_markup:
+                        message_buttons[msg_id] = reply_markup
+                    await asyncio.sleep(0.3)  # small delay to avoid timeouts
+                except Exception as e:
+                    errors.append(f"❌ Failed to update message {msg_id}: {e}")
+
+            if errors:
+                await update.message.reply_text("\n".join(errors))
+            await update.message.reply_text("✅ Batch same content completed!")
+            user_data[user_id] = {}
+            return
 
 # =====================================================
-# MAIN FUNCTION
+# APPLICATION SETUP
 # =====================================================
-def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Command Handlers
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("rep_btn", rep_btn))
-    app.add_handler(CommandHandler("replace", replace_cmd))
-    app.add_handler(CommandHandler("batch", batch_cmd))
-    app.add_handler(CommandHandler("batch_same", batch_same_cmd))
+# Commands
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("rep_btn", rep_btn))
+app.add_handler(CommandHandler("replace", replace_cmd))
+app.add_handler(CommandHandler("batch", batch_cmd))
+app.add_handler(CommandHandler("batch_same", batch_same_cmd))
 
-    # Callback Query Handler
-    app.add_handler(CallbackQueryHandler(callback_handler))
+# Callback queries
+app.add_handler(CallbackQueryHandler(callback_handler))
 
-    # Main Message Handler
-    app.add_handler(MessageHandler(filters.ALL, handle_message))
+# Messages
+app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
 
-    # Start the bot
-    print("Bot started...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+# =====================================================
+# RUN
+# =====================================================
+print("Bot is starting...")
+app.run_polling()
