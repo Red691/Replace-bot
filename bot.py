@@ -102,6 +102,21 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    async def edit(query, text, keyboard):
+        # If original message had photo -> edit caption
+        if query.message.photo:
+            await query.edit_message_caption(
+                caption=text,
+                reply_markup=keyboard,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text(
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="Markdown"
+            )
+
     # ---------- ABOUT ----------
     if query.data == "about":
         text = (
@@ -114,11 +129,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Back", callback_data="home")]
         ])
 
-        await query.edit_message_caption(
-            caption=text,
-            reply_markup=keyboard,
-            parse_mode="Markdown"
-        )
+        await edit(query, text, keyboard)
 
     # ---------- HELP ----------
     elif query.data == "help":
@@ -135,15 +146,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Back", callback_data="home")]
         ])
 
-        await query.edit_message_caption(
-            caption=text,
-            reply_markup=keyboard,
-            parse_mode="Markdown"
-        )
+        await edit(query, text, keyboard)
 
     # ---------- HOME ----------
     elif query.data == "home":
-        intro_text = (
+        text = (
             "✨ **Welcome to Post Manager Bot** ✨\n\n"
             "This bot helps manage Telegram channel posts.\n"
             "Replace media, captions and buttons easily."
@@ -157,16 +164,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         ])
 
-        await query.edit_message_caption(
-            caption=intro_text,
-            reply_markup=keyboard,
-            parse_mode="Markdown"
-        )
+        await edit(query, text, keyboard)
 
-    # ---------- SMALL ALERT ----------
+    # ---------- ALERT ----------
     elif query.data == "cmd_replace":
         await query.answer("Use /replace command in chat", show_alert=True)
-
 
 # =====================================================
 #              /rep_btn  (BUTTON EDIT)
