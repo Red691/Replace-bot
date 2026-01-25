@@ -306,7 +306,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Check if all messages collected
         await update.message.reply_text(f"✅ Stored {len(collected)}/{len(msg_ids)}.")
         
-        if len(collected) >= len(msg_ids):        else:
+        if len(collected) >= len(msg_ids):
             user_data[user_id]["new_contents"] = collected
             user_data[user_id]["step"] = "awaiting_batch_buttons"
             await update.message.reply_text("Send new button layout OR type skip for all messages.")
