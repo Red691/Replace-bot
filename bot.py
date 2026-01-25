@@ -5,7 +5,7 @@ from telegram import (
     InlineKeyboardMarkup,
     InputMediaPhoto,
     InputMediaVideo,
-    InputFile
+    InputMediaDocument
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -65,12 +65,6 @@ def extract_ids(post_link: str):
     message_id = int(parts[-1])
     return chat_id, message_id
 
-# ---------- RANGE GENERATOR ----------
-def generate_message_ids(first_id, last_id):
-    if first_id > last_id:
-        first_id, last_id = last_id, first_id
-    return list(range(first_id, last_id + 1))
-
 # =====================================================
 #                     /START
 # =====================================================
@@ -78,7 +72,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     intro_text = (
         "Welcome to Post Manager Bot\n\n"
         "This bot helps manage Telegram channel posts.\n"
-        "Replace media, captions, files, and buttons easily."
+        "Replace media, captions and buttons easily."
     )
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 Main Channel", url=MAIN_CHANNEL)],
@@ -99,35 +93,39 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
     async def edit(text, keyboard):
-        if query.message.photo:
+        if query.message.photo or query.message.video:
             await query.edit_message_caption(caption=text, reply_markup=keyboard)
         else:
             await query.edit_message_text(text=text, reply_markup=keyboard)
 
     if query.data == "about":
-        text = f"Owner: {OWNER_USERNAME}\nDeveloper: {OWNER_USERNAME}\n\nThis bot manages Telegram posts."
+        text = f"Owner: {OWNER_USERNAME}\nDeveloper: {OWNER_USERNAME}\n\nThis bot is built for managing Telegram channel posts."
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="home")]])
         await edit(text, keyboard)
     elif query.data == "help":
         text = (
-            "Commands:\n"
-            "/rep_btn - Edit buttons\n"
-            "/replace - Replace a post\n"
-            "/batch - Replace multiple posts sequentially\n\n"
-            "Admin only."
+            "How To Use\n\n"
+            "/rep_btn  - Edit only buttons of a post\n"
+            "/replace  - Replace post media or text\n"
+            "/batch  - Replace multiple posts sequentially\n\n"
+            "Commands work for Admin only."
         )
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔁 Replace Info", callback_data="cmd_replace")],
+            [InlineKeyboardButton("🔁 Replace Command Info", callback_data="cmd_replace")],
             [InlineKeyboardButton("💬 Support Group", url=SUPPORT_GROUP)],
             [InlineKeyboardButton("🔙 Back", callback_data="home")]
         ])
         await edit(text, keyboard)
     elif query.data == "home":
-        text = "Welcome to Post Manager Bot\nManage posts easily."
+        text = "Welcome to Post Manager Bot\n\nThis bot helps manage Telegram channel posts.\nReplace media, captions and buttons easily."
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("📢 Main Channel", url=MAIN_CHANNEL)],
-            [InlineKeyboardButton("ℹ️ About", callback_data="about"), InlineKeyboardButton("❓ Help", callback_data="help")]
+            [
+                InlineKeyboardButton("ℹ️ About", callback_data="about"),
+                InlineKeyboardButton("❓ Help", callback_data="help")
+            ]
         ])
         await edit(text, keyboard)
     elif query.data == "cmd_replace":
@@ -161,8 +159,7 @@ async def batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Access Denied")
         return
     await update.message.reply_text(
-        "Send FIRST and LAST post links separated by a dash (-)\n"
-        "Example:\nhttps://t.me/c/123/50 - https://t.me/c/123/59"
+        "Send FIRST and LAST post links separated by a dash (-)\nExample:\nhttps://t.me/c/123/50 - https://t.me/c/123/60"
     )
     user_data[update.effective_user.id] = {"step": "awaiting_batch_links"}
 
@@ -175,16 +172,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in user_data:
         return
+
     step = user_data[user_id]["step"]
 
     # ---- BUTTON EDIT ----
     if step == "awaiting_post_link":
         user_data[user_id]["post_link"] = update.message.text
         user_data[user_id]["step"] = "awaiting_buttons"
-        await update.message.reply_text(
-            "Send button layout:\nLabel - URL\nDouble space = same row\nEnter = new row"
-        )
+        await update.message.reply_text("Send button layout:\nLabel - URL\nDouble space = same row\nEnter = new row")
         return
+
     if step == "awaiting_buttons":
         post_link = user_data[user_id]["post_link"]
         keyboard = parse_buttons(update.message.text)
@@ -199,12 +196,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id] = {}
         return
 
-    # ---- REPLACE SINGLE ----
+    # ---- REPLACE ----
     if step == "awaiting_replace_link":
         user_data[user_id]["post_link"] = update.message.text
         user_data[user_id]["step"] = "awaiting_new_file"
-        await update.message.reply_text("Send new Photo / Video / Text / File or type skip")
+        await update.message.reply_text("Send new Photo / Video / Document / Text or type skip")
         return
+
     if step == "awaiting_new_file":
         if update.message.text and update.message.text.lower() == "skip":
             user_data[user_id]["new_content"] = None
@@ -213,6 +211,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id]["step"] = "awaiting_new_buttons"
         await update.message.reply_text("Send new button layout OR type skip")
         return
+
     if step == "awaiting_new_buttons":
         post_link = user_data[user_id]["post_link"]
         chat_id, message_id = extract_ids(post_link)
@@ -224,16 +223,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = new_buttons or message_buttons.get(message_id, None)
         try:
             if new_msg:
+                caption = new_msg.caption or new_msg.text or ""
                 if new_msg.photo:
-                    media = InputMediaPhoto(media=new_msg.photo[-1].file_id, caption=new_msg.caption or "")
+                    media = InputMediaPhoto(media=new_msg.photo[-1].file_id, caption=caption)
                     await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
                 elif new_msg.video:
-                    media = InputMediaVideo(media=new_msg.video.file_id, caption=new_msg.caption or "")
+                    media = InputMediaVideo(media=new_msg.video.file_id, caption=caption)
                     await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
                 elif new_msg.document:
-                    await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=InputMediaPhoto(media=new_msg.document.file_id, caption=new_msg.caption or ""), reply_markup=reply_markup)
+                    media = InputMediaDocument(media=new_msg.document.file_id, caption=caption)
+                    await context.bot.edit_message_media(chat_id=chat_id, message_id=message_id, media=media, reply_markup=reply_markup)
                 else:
-                    await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=new_msg.text or "", reply_markup=reply_markup)
+                    await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=caption, reply_markup=reply_markup)
             else:
                 await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=reply_markup)
             if reply_markup:
@@ -244,75 +245,80 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id] = {}
         return
 
-    # ---- BATCH REPLACE ----
+    # ---- BATCH ----
     if step == "awaiting_batch_links":
         try:
             first_link, last_link = map(str.strip, update.message.text.split("-", 1))
         except:
             await update.message.reply_text("❌ Invalid format. Send like:\nlink1 - link2")
             return
-        f_chat, f_id = extract_ids(first_link)
-        l_chat, l_id = extract_ids(last_link)
-        ids_list = generate_message_ids(f_id, l_id)
-        if f_chat != l_chat:
-            await update.message.reply_text("❌ Links must belong to same channel.")
+
+        # Extract all message IDs sequentially
+        first_chat, first_msg = extract_ids(first_link)
+        last_chat, last_msg = extract_ids(last_link)
+        if first_chat != last_chat:
+            await update.message.reply_text("❌ First and last messages must be from the same chat")
             return
-        user_data[user_id]["chat_id"] = f_chat
-        user_data[user_id]["msg_ids"] = ids_list
+        msg_ids = list(range(first_msg, last_msg+1))
+        user_data[user_id]["msg_ids"] = msg_ids
+        user_data[user_id]["chat_id"] = first_chat
         user_data[user_id]["step"] = "awaiting_batch_content"
-        await update.message.reply_text(
-            f"Send {len(ids_list)} content messages (Photo/Video/Text/File) sequentially or type skip for all"
-        )
+        await update.message.reply_text(f"Send new content for {len(msg_ids)} messages sequentially, or type skip for each")
         return
 
     if step == "awaiting_batch_content":
         msg_ids = user_data[user_id]["msg_ids"]
-        contents = []
         if update.message.text and update.message.text.lower() == "skip":
             contents = [None]*len(msg_ids)
         else:
-            # If user sends media group, collect all
-            if update.message.media_group_id:
-                contents = update.message.effective_attachment  # Will handle single or multiple
-            else:
-                contents.append(update.message)
+            contents = []
+            # Always wrap single message
+            contents.append(update.message)
         if len(contents) != len(msg_ids):
-            await update.message.reply_text(f"❌ Number of contents ({len(contents)}) doesn't match messages ({len(msg_ids)}).")
-            return
+            # If user sent fewer, we will repeat last content
+            contents = (contents * len(msg_ids))[:len(msg_ids)]
+
         user_data[user_id]["new_contents"] = contents
         user_data[user_id]["step"] = "awaiting_batch_buttons"
         await update.message.reply_text("Send new button layout OR type skip")
         return
 
     if step == "awaiting_batch_buttons":
-        chat_id = user_data[user_id]["chat_id"]
         msg_ids = user_data[user_id]["msg_ids"]
-        contents = user_data[user_id]["new_contents"]
+        chat_id = user_data[user_id]["chat_id"]
+        new_contents = user_data[user_id]["new_contents"]
+
         if update.message.text.lower() == "skip":
-            reply_markup = None
+            reply_markup_list = [message_buttons.get(msg_id, None) for msg_id in msg_ids]
         else:
-            reply_markup = parse_buttons(update.message.text)
-        for i, msg_id in enumerate(msg_ids):
-            new_msg = contents[i]
+            new_buttons = parse_buttons(update.message.text)
+            reply_markup_list = [new_buttons or message_buttons.get(msg_id, None) for msg_id in msg_ids]
+
+        # Sequential update
+        for msg_id, content, reply_markup in zip(msg_ids, new_contents, reply_markup_list):
             try:
-                if new_msg:
-                    if new_msg.photo:
-                        media = InputMediaPhoto(media=new_msg.photo[-1].file_id, caption=new_msg.caption or "")
+                if content:
+                    caption = content.caption or content.text or ""
+                    if content.photo:
+                        media = InputMediaPhoto(media=content.photo[-1].file_id, caption=caption)
                         await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
-                    elif new_msg.video:
-                        media = InputMediaVideo(media=new_msg.video.file_id, caption=new_msg.caption or "")
+                    elif content.video:
+                        media = InputMediaVideo(media=content.video.file_id, caption=caption)
                         await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
-                    elif new_msg.document:
-                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=InputMediaPhoto(media=new_msg.document.file_id, caption=new_msg.caption or ""), reply_markup=reply_markup)
+                    elif content.document:
+                        media = InputMediaDocument(media=content.document.file_id, caption=caption)
+                        await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
                     else:
-                        await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=new_msg.text or "", reply_markup=reply_markup)
+                        await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=caption, reply_markup=reply_markup)
                 else:
                     await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=reply_markup)
+
                 if reply_markup:
                     message_buttons[msg_id] = reply_markup
             except Exception as e:
-                await update.message.reply_text(f"❌ Failed msg {msg_id}: {e}")
-        await update.message.reply_text("✅ Batch replace done successfully!")
+                await update.message.reply_text(f"❌ Failed to update message {msg_id}: {e}")
+
+        await update.message.reply_text("✅ Batch replace completed!")
         user_data[user_id] = {}
         return
 
@@ -321,12 +327,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =====================================================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rep_btn", rep_btn))
     app.add_handler(CommandHandler("replace", replace_cmd))
     app.add_handler(CommandHandler("batch", batch_cmd))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.ALL, handle_message))
+
     app.run_polling()
 
 if __name__ == "__main__":
