@@ -396,46 +396,54 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg_ids = user_data[user_id]["msg_ids"]
             chat_id = user_data[user_id]["chat_id"]
             content = user_data[user_id]["new_content"]
+            
             if update.message.text.lower() == "skip":
                 reply_markup = None
             else:
                 reply_markup = parse_buttons(update.message.text)
-
             for mid in msg_ids:
                 try:
                     if content:
                         caption = content.caption or content.text or ""
+                        
                         if content.photo:
                             media = InputMediaPhoto(content.photo[-1].file_id, caption=caption)
                             await context.bot.edit_message_media(chat_id=chat_id, message_id=mid, media=media, reply_markup=reply_markup)
+                        
                         elif content.video:
                             media = InputMediaVideo(content.video.file_id, caption=caption)
                             await context.bot.edit_message_media(chat_id=chat_id, message_id=mid, media=media, reply_markup=reply_markup)
+                        
                         elif content.document:
                             media = InputMediaDocument(content.document.file_id, caption=caption)
                             await context.bot.edit_message_media(chat_id=chat_id, message_id=mid, media=media, reply_markup=reply_markup)
+                        
                         elif content.animation:
                             media = InputMediaAnimation(content.animation.file_id, caption=caption)
-                            await context.bot.edit_message_media(chat_id=chat_id, message_id=msg_id, media=media, reply_markup=reply_markup)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=mid, media=media, reply_markup=reply_markup)
+                        
+                        elif content.audio:
+                            media = InputMediaAudio(content.audio.file_id, caption=caption)
+                            await context.bot.edit_message_media(chat_id=chat_id, message_id=mid, media=media, reply_markup=reply_markup)
+                        
                         elif content.sticker:
                             await context.bot.send_sticker(chat_id=chat_id, sticker=content.sticker.file_id)
+                        
                         else:
-                            await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=caption, reply_markup=reply_markup)
-                    else:
-                        await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=reply_markup)
-
-                    if reply_markup:
-                        message_buttons[msg_id] = reply_markup
-                    await asyncio.sleep(0.3)  # small delay to avoid timeouts
-                except Exception as e:
-                    errors.append(f"❌ Failed to update message {msg_id}: {e}")
-
+                            await context.bot.edit_message_text(chat_id=chat_id, message_id=mid, text=caption, reply_markup=reply_markup)
+                        else:
+                            await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=mid, reply_markup=reply_markup)
+                        if reply_markup:
+                            message_buttons[mid] = reply_markup
+                            
+                        await asyncio.sleep(0.3)
+                    except Exception as e:
+                        errors.append(f"❌ Failed to update message {mid}: {e}")
             if errors:
                 await update.message.reply_text("\n".join(errors))
             await update.message.reply_text("✅ Batch same content completed!")
-            user_data[user_id] = {}
+                user_data[user_id] = {}
             return
-
 # =====================================================
 # APPLICATION SETUP
 # =====================================================
