@@ -10,11 +10,11 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 
 # ===== CONFIG =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))  # Heroku Config Var
+ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))
 
 # ----- TEMP DATA -----
-user_data = {}  # Track user steps
-message_buttons = {}  # message_id : InlineKeyboardMarkup (store buttons)
+user_data = {}
+message_buttons = {}
 
 
 # ---------- ADMIN CHECK ----------
@@ -23,25 +23,32 @@ def is_admin(update: Update):
     return user and int(user.id) == ADMIN_ID
 
 
-# ---------- BUTTON PARSER ----------
+# ---------- NEW BUTTON PARSER ----------
+# Each line = one row
+# Each button separated by single space
+# Format: Label-https://link
 def parse_buttons(text: str):
     keyboard = []
-    rows = text.split("\n")  # New row = Enter
+    rows = text.split("\n")
 
     for row in rows:
         row = row.strip()
         if not row:
             continue
-        parts = row.split("  ")  # Double space = same row
+
+        parts = row.split()  # Single space separates buttons
         row_buttons = []
 
         for part in parts:
             if "-" not in part:
                 continue
+
             label, url = part.split("-", 1)
             label, url = label.strip(), url.strip()
+
             if not url.startswith("http"):
                 continue
+
             row_buttons.append(InlineKeyboardButton(label, url=url))
 
         if row_buttons:
@@ -52,9 +59,6 @@ def parse_buttons(text: str):
 
 # ---------- LINK EXTRACT ----------
 def extract_ids(post_link: str):
-    """
-    Converts t.me/c/channel_id/message_id to chat_id and message_id
-    """
     if "t.me/c/" not in post_link:
         return None, None
     parts = post_link.split("/")
@@ -80,7 +84,7 @@ async def replace_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "Send the post link you want to /replace. You can also send new inline buttons after content."
+        "Send the post link you want to /replace."
     )
     user_data[update.effective_user.id] = {"step": "awaiting_replace_link"}
 
@@ -102,7 +106,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id]["post_link"] = text
         user_data[user_id]["step"] = "awaiting_buttons"
         await update.message.reply_text(
-            "Send button layout (if any):\n\nNew row = Enter\nSame row = Double Space"
+            "Send button layout:\nEach line = one row\nButtons separated by space"
         )
         return
 
@@ -110,6 +114,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         post_link = user_data[user_id]["post_link"]
         keyboard = parse_buttons(text)
         chat_id, message_id = extract_ids(post_link)
+
         if not chat_id:
             await update.message.reply_text("❌ Invalid post link.")
             return
@@ -122,7 +127,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             if keyboard:
                 message_buttons[message_id] = keyboard
+
             await update.message.reply_text("✅ Buttons updated successfully!")
+
         except Exception as e:
             await update.message.reply_text(f"❌ {e}")
 
@@ -134,19 +141,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id]["post_link"] = text
         user_data[user_id]["step"] = "awaiting_new_content"
         await update.message.reply_text(
-            "Send new Text OR Photo OR Video. You can also include inline buttons (text format)."
+            "Send new Text / Photo / Video. Caption me buttons bhi likh sakte ho."
         )
         return
 
     if step == "awaiting_new_content":
         post_link = user_data[user_id]["post_link"]
         chat_id, message_id = extract_ids(post_link)
+
         if not chat_id:
             await update.message.reply_text("❌ Invalid post link.")
             return
 
         try:
-            # Check if user sent new buttons in caption/text
             new_buttons = None
             if update.message.caption:
                 new_buttons = parse_buttons(update.message.caption)
@@ -156,7 +163,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = new_buttons or message_buttons.get(message_id, None)
             new_caption = update.message.caption or update.message.text or ""
 
-            # --- PHOTO REPLACE ---
+            # --- PHOTO ---
             if update.message.photo:
                 file_id = update.message.photo[-1].file_id
                 media = InputMediaPhoto(media=file_id, caption=new_caption)
@@ -167,7 +174,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=reply_markup
                 )
 
-            # --- VIDEO REPLACE ---
+            # --- VIDEO ---
             elif update.message.video:
                 file_id = update.message.video.file_id
                 media = InputMediaVideo(media=file_id, caption=new_caption)
@@ -178,7 +185,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=reply_markup
                 )
 
-            # --- TEXT ONLY REPLACE ---
+            # --- TEXT ---
             elif update.message.text:
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
@@ -187,7 +194,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=reply_markup
                 )
 
-            # Save buttons for future replaces
             if reply_markup:
                 message_buttons[message_id] = reply_markup
 
