@@ -21,7 +21,7 @@ from telegram.ext import (
 
 # ===== CONFIG =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))
+ADMIN_ID = list(map(int, os.environ.get("ADMIN_ID", "").split()))
 
 MAIN_CHANNEL = "https://t.me/YourChannel"
 SUPPORT_GROUP = "https://t.me/YourSupportGroup"
@@ -34,8 +34,7 @@ message_buttons = {}
 # ---------- ADMIN CHECK ----------
 def is_admin(update: Update):
     user = update.effective_user
-    return user and int(user.id) == ADMIN_ID
-
+    return user and int(user.id) in ADMIN_ID
 # ---------- BUTTON PARSER ----------
 def parse_buttons(text: str):
     keyboard = []
