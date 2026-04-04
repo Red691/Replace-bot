@@ -1,6 +1,6 @@
 import os
 import asyncio
-from btn_replace_plugin import register_plugin
+from btn_replace_plugin import btn_rep_link, handle_message
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -459,6 +459,8 @@ app.add_handler(CommandHandler("replace", replace_cmd))
 app.add_handler(CommandHandler("batch", batch_cmd))
 app.add_handler(CommandHandler("batch_same", batch_same_cmd))
 app.add_handler(CommandHandler("btn_rep_link", btn_rep_link))
+
+app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
 # Callback queries
 app.add_handler(CallbackQueryHandler(callback_handler))
