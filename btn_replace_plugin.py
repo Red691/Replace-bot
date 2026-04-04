@@ -1,68 +1,95 @@
-import re
+# btn_replace_plugin.py
 import asyncio
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CommandHandler, ContextTypes, Update
+import re
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import CommandHandler, ContextTypes
 from telegram.error import RetryAfter
 
-LINK_RE = r"https://t\.me/c/(\d+)/(\d+)"
+# user_data for temporary storage
+user_data = {}
 
-def replace_bot_in_url(url, new_bot):
-    if not url.startswith("https://t.me/"):
-        return url
-    parts = url.split("?start=")
-    if len(parts) != 2:
-        return url
-    payload = parts[1]
-    return f"https://t.me/{new_bot}?start={payload}"
+def register_plugin(app):
+    app.add_handler(CommandHandler("btn_rep_link", btn_rep_link))
+    app.add_handler(MessageHandler(~filters.COMMAND, handle_message))
 
-def extract_chat_and_msg(link):
-    m = re.match(LINK_RE, link)
+# Regex to parse Telegram links
+LINK_RE = re.compile(r"https://t.me/c/(\d+)/(\d+)")
+
+def extract_ids(link: str):
+    m = LINK_RE.match(link.strip())
     if not m:
         return None, None
     chat_id = int("-100" + m.group(1))
-    msg_id = int(m.group(2))
-    return chat_id, msg_id
+    message_id = int(m.group(2))
+    return chat_id, message_id
 
+# Command
 async def btn_rep_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update):
-        await update.message.reply_text("⛔ Access Denied")
+    user_data[update.effective_user.id] = {"step": "awaiting_links"}
+    await update.message.reply_text(
+        "Send command in format:\n"
+        "/btn_rep_link <start_link> - <end_link> | <button_text> | <new_bot_username>"
+    )
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in user_data:
         return
-    try:
-        text = update.message.text[len("/btn_rep_link "):].strip()
-        links_part, button_text, new_bot = map(str.strip, text.split("|", 2))
-        start_link, end_link = map(str.strip, links_part.split("-", 1))
-        chat_id, start_id = extract_chat_and_msg(start_link)
-        _, end_id = extract_chat_and_msg(end_link)
+    step = user_data[user_id].get("step")
 
-        await update.message.reply_text(f"✅ Editing messages {start_id}-{end_id}...")
+    if step == "awaiting_links":
+        text = update.message.text
+        try:
+            link_part, btn_text, new_bot = map(str.strip, text.split("|"))
+            start_link, end_link = map(str.strip, link_part.split("-", 1))
+        except:
+            await update.message.reply_text("❌ Invalid format. Use:\nlink1 - link2 | button_text | new_bot_username")
+            return
 
-        for msg_id in range(start_id, end_id + 1):
+        start_chat, start_msg = extract_ids(start_link)
+        end_chat, end_msg = extract_ids(end_link)
+
+        if start_chat != end_chat:
+            await update.message.reply_text("❌ Links must be from the same chat")
+            return
+
+        msg_ids = list(range(start_msg, end_msg + 1))
+        edited, skipped, errors = 0, 0, []
+
+        for mid in msg_ids:
             try:
-                msg = await context.bot.get_chat(chat_id).get_message(msg_id)
+                msg = await context.bot.get_message(start_chat, mid)
                 if not msg.reply_markup:
-                    print(f"Skipped {msg_id} (no buttons)")
+                    skipped += 1
                     continue
-                new_rows = []
-                edited = False
-                for row in msg.reply_markup.inline_keyboard:
-                    new_row = []
+
+                buttons = msg.reply_markup.inline_keyboard
+                changed = False
+                for row in buttons:
                     for btn in row:
-                        if button_text.lower() in btn.text.lower():
-                            new_row.append(InlineKeyboardButton(btn.text, url=replace_bot_in_url(btn.url, new_bot)))
-                            edited = True
-                        else:
-                            new_row.append(btn)
-                    new_rows.append(new_row)
-                if edited:
-                    await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=InlineKeyboardMarkup(new_rows))
-                    print(f"Edited {msg_id}")
+                        if btn_text.lower() in btn.text.lower() and "t.me/" in btn.url:
+                            parts = btn.url.split("?start=")
+                            payload = parts[1] if len(parts) > 1 else ""
+                            btn.url = f"https://t.me/{new_bot}?start={payload}"
+                            changed = True
+
+                if changed:
+                    await context.bot.edit_message_reply_markup(
+                        chat_id=start_chat,
+                        message_id=mid,
+                        reply_markup=InlineKeyboardMarkup(buttons)
+                    )
+                    edited += 1
+                    await asyncio.sleep(2)
                 else:
-                    print(f"Skipped {msg_id} (no matching button)")
-                await asyncio.sleep(2)
+                    skipped += 1
             except RetryAfter as e:
-                await asyncio.sleep(e.retry_after + 1)
+                await asyncio.sleep(e.retry_after)
+                continue
             except Exception as e:
-                print(f"Error {msg_id}: {e}")
-        await update.message.reply_text("✅ Done!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ {e}")
+                errors.append(f"Msg {mid}: {e}")
+
+        await update.message.reply_text(
+            f"✅ Done!\nEdited: {edited}\nSkipped: {skipped}\nErrors: {len(errors)}"
+        )
+        user_data[user_id] = {}
