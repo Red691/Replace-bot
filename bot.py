@@ -449,6 +449,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =====================================================
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+# Register plugin commands
+register_plugin(app)
+
 # Commands
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("rep_btn", rep_btn))
