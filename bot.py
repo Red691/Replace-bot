@@ -1,5 +1,6 @@
 import os
 import asyncio
+from btn_replace_plugin import register_plugin
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -447,6 +448,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # APPLICATION SETUP
 # =====================================================
 app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+register_plugin(app)
 
 # Commands
 app.add_handler(CommandHandler("start", start))
