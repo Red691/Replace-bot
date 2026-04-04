@@ -449,9 +449,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =====================================================
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# Register plugin commands
-register_plugin(app)
-
 # Commands
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("rep_btn", rep_btn))
@@ -460,14 +457,12 @@ app.add_handler(CommandHandler("batch", batch_cmd))
 app.add_handler(CommandHandler("batch_same", batch_same_cmd))
 app.add_handler(CommandHandler("btn_rep_link", btn_rep_link))
 
-app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-
 # Callback queries
 app.add_handler(CallbackQueryHandler(callback_handler))
 
 # Messages
-app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
-
+app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))  # optional
 # =====================================================
 # RUN
 # =====================================================
